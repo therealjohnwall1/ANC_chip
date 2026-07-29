@@ -1,5 +1,20 @@
 import numpy as np
 
+"""
+Full generated data path
+
+                      +-------------------+
+                      |   Primary Path    |  ---> Modifies delay & EQ
+ Raw Noise x(n) ----> | (Short FIR Filter)| ---------------------------> Disturbance d(n)
+                      +-------------------+                                  |
+                                                                             v
+                                                                   [ Noise at Ear ]
+                                                                 (d(n) + Anti-Noise)
+"""
+
+# TODO: implement/add support for time enveleopes
+# TODO: pink noise swapout/compare for white noise
+# TODO: add secondary path support after og filter done
 
 def generate_noise(fs, A_tone, sig_noise, f0, n)->np.ndarray:
     """
@@ -20,7 +35,26 @@ def generate_noise(fs, A_tone, sig_noise, f0, n)->np.ndarray:
 
     return x
 
+def FIR_filter(x:np.ndarray, taps:np.ndarray)->np.ndarray:
+    """
+    np.convolve(x,taps, full) same thing
+    Apply short FIR filter to X
 
+    Args:
+        x: input(1d)
+        taps: filter coefficents
+    """
+
+    N = len(taps)
+    y = np.zeros(len(x))
+
+    for n in range(len(x)):
+        acc = 0
+        for k in range(N):
+            if n-k >= 0:
+                acc += taps[k] * x[n-k]
+        y[n] = acc
+    return y
 
 
 

@@ -4,10 +4,9 @@ from scripts.gen_noise import generate_noise
 
 
 if __name__ == "__main__":
-    #fs = 44100
-    fs = 1000000
+    fs = 44100
     A_tone = 1.0
-    sig_noise = 0.8
+    sig_noise = 0
     f0 = 440
     n = 1000
 
