@@ -89,7 +89,6 @@ def lms_step(x:np.ndarray, error:np.ndarray, w_n:np.ndarray, lr:float)->np.ndarr
     return w_n1
 
 
-
 def lms_walk(x_ref:np.ndarray, x_truth:np.ndarray, taps:int, lr:float)->list:
     """
     Gradient descent from least mean squared error using jacobian estimation
