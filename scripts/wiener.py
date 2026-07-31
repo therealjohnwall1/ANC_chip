@@ -2,7 +2,7 @@ import numpy as np
 
 def autocorrelation(x:np.ndarray, lag:int)->float:
     """
-    calculate the autocorrelation of signal x with lag 
+    calculate the autocorrelation of signal x with lag
     normalized result returned
     """
     n = len(x)
@@ -42,7 +42,7 @@ def crosscorrelation(x:np.ndarray, y:np.ndarray)->np.ndarray:
     """
     calculate the crosscorrelation vector between signals x and y
     p[k] = normalized sum_n x[n] * y[n+k], for lag k = 0..n-1
-    
+
     p -> for lags K 0..N-1
     """
     n = len(x)
@@ -69,17 +69,17 @@ def crosscorrelation(x:np.ndarray, y:np.ndarray)->np.ndarray:
 
 def wiener_hopf(x_truth:np.ndarray, x_est:np.ndarray)->np.ndarray:
     """
-    wiener hopf solution to minimize 
+    wiener hopf solution to minimize
     J(w) = E[(d(n) - w^TX[n])^2]
     expand and take jacobian then set to 0 to get
     0 = -2p + 2Rw, solve, closed foorm for wiener hopf is  w
-    """ 
+    """
 
     R = autocorrelation_matrix(x_est)
     p = crosscorrelation(x_est, x_truth)
 
     w = np.linalg.solve(R,p)
-    
+
     return w
 
 def lms_step(x:np.ndarray, error:np.ndarray, w_n:np.ndarray, lr:float)->np.ndarray:
@@ -96,11 +96,17 @@ def lms_walk(x_ref:np.ndarray, x_truth:np.ndarray, taps:int, lr:float)->list:
     Should converge to global min error on w_opt(taps) if space is convex
 
     steps through x_ref/x_truth sample by sample, updating w_n online via lms_step
+
+    Args:
+        x_ref: reference/input signal the filter is applied to (1d)
+        x_truth: desired/target signal the filter output should match (1d, same length as x_ref)
+        taps: number of filter coefficients (length of w_n), sets the FIR filter order
+        lr: learning rate / step size controlling how much w_n moves per update
     """
     assert(len(x_ref) == len(x_truth))
 
     n = len(x_ref)
-    w_n = np.zeros(taps)
+    w_n = np.zeros(taps)  # w_n: current filter weight estimate, taps-length vector,
     history = [w_n.copy()]
 
     for i in range(taps, n):
