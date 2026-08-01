@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scripts.gen_noise import generate_noise, FIR_filter
 from scripts.wiener import lms_walk
 from scripts.ans import lms_anc, calc_attenuation
+from scripts.tune import tune_anc
 
 
 def test_generate_noise():
@@ -98,7 +99,26 @@ def test_lms_anc():
     plt.show()
 
 
+def test_tune_anc():
+    fs = 44100
+    A_tone = 1.0
+    sig_noise = 0.1
+    f0 = 440
+    n = 2000
+
+    true_path = np.array([0.8, 0.4, -0.2, 0.1, 0.0, -0.05, 0.02, 0.0])
+
+    x_ref = generate_noise(fs, A_tone, sig_noise, f0, n)
+    d = FIR_filter(x_ref, true_path)
+
+    taps_list = [8, 16, 32]
+    lr_list = [0.005, 0.01, 0.05, 0.2]  # 0.2 is intentionally past the stability bound
+
+    tune_anc(x_ref, d, taps_list, lr_list, true_path=true_path)
+
+
 if __name__ == "__main__":
     # test_generate_noise()
     # test_lms_walk()
-    test_lms_anc()
+    #test_lms_anc()
+    test_tune_anc()
