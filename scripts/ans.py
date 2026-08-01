@@ -19,7 +19,7 @@ def calc_attenuation(x: np.ndarray, res: np.ndarray) -> float:
     return math.log10(P_before / P_after)
 
 
-def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float):
+def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, normalize=False):
     """
     LMS adaptive filter reframed as feedforward ANC (no secondary path yet)
 
@@ -41,6 +41,7 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float):
         w_history: filter coefficients w_n after each step (len n-taps+1, includes initial zeros)
     """
     assert len(x) == len(d)
+    epsil = 0.00001 # idk to paramtize ngl
 
     n = len(x)
     w_n = np.zeros(taps)
@@ -56,6 +57,10 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float):
 
         y[i - taps] = y_hat
         e[i - taps] = error
+        
+        if normalize:
+            x_power = np.mean(np.abs(x)**2)
+            lr = lr/(x_power + epsil)
 
         w_n = lms_step(x_window, error, w_n, lr)
         w_history.append(w_n.copy())
