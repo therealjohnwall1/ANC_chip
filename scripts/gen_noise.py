@@ -14,7 +14,6 @@ Full generated data path
 
 # TODO: implement/add support for time enveleopes
 # TODO: pink noise swapout/compare for white noise
-# TODO: add secondary path support after og filter done
 
 def generate_noise(fs, A_tone, sig_noise, f0, n)->np.ndarray:
     """

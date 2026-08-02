@@ -82,7 +82,14 @@ def wiener_hopf(x_truth:np.ndarray, x_est:np.ndarray)->np.ndarray:
 
     return w
 
-def lms_step(x:np.ndarray, error:np.ndarray, w_n:np.ndarray, lr:float)->np.ndarray:
+def lms_step(x:np.ndarray, error:float, w_n:np.ndarray, lr:float)->np.ndarray:
+    """
+    Generic LMS weight update, w_n1 = w_n + lr * error * x
+
+    For plain LMS, x is the raw reference window. For FxLMS, pass in the
+    reference window already filtered through the estimated secondary path
+    (Shat(z)) instead -- this function doesn't need to know which.
+    """
     jac_hat = error * x
     w_n1 = w_n + lr * jac_hat
 
