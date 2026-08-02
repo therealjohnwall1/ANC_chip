@@ -20,7 +20,7 @@ def calc_attenuation(x: np.ndarray, res: np.ndarray) -> float:
     return math.log10(P_before / P_after)
 
 
-def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarray, s_hat_taps: np.ndarray = None, normalize: bool = False):
+def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarray = None, s_hat_taps: np.ndarray = None, normalize: bool = False):
 
     """
     FxLMS adaptive filter reframed as feedforward ANC
@@ -51,8 +51,10 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarr
         lr: learning rate / step size
         s_taps: secondary path (speaker -> error mic), fixed, applied to y[n]
                 to produce what actually arrives at the error mic. Never
-                updated by gradient descent.
-        s_hat_taps: filter's *estimate* of the secondary path, used to filter
+                updated by gradient descent. Defaults to an identity path
+                ([1.0], i.e. no secondary path), which reduces this to plain
+                LMS -- pass real taps to actually exercise FxLMS.
+        s_hat_taps: filter's estimate of the secondary path, used to filter
                     the reference x[n] before correlating it with error[n]
                     (the "Filtered-X" step -- corrects the gradient direction
                     that the raw secondary path distorts). Defaults to a
@@ -71,6 +73,8 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarr
     assert len(x) == len(d)
     epsil = 0.00001 # idk to paramtize ngl
 
+    if s_taps is None:
+        s_taps = np.array([1.0])
     if s_hat_taps is None:
         s_hat_taps = s_taps
 
@@ -105,7 +109,8 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarr
         if normalize:
             x_filt_power = np.mean(x_filt_window ** 2)
             step_lr = lr / (x_filt_power + epsil)
-
+        
+        # update step in grad descent
         w_n = lms_step(x_filt_window, error, w_n, step_lr)
         w_history.append(w_n.copy())
 
