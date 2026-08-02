@@ -114,7 +114,8 @@ def test_tune_anc():
     taps_list = [8, 16, 32]
     lr_list = [0.005, 0.01, 0.05, 0.2]  # 0.2 is intentionally past the stability bound
 
-    tune_anc(x_ref, d, taps_list, lr_list, true_path=true_path)
+    tune_anc(x_ref, d, fs, taps_list, lr_list, true_path=true_path)
+    tune_anc(x_ref, d, fs, taps_list, lr_list, true_path=true_path, normalize=True)
 
 
 if __name__ == "__main__":

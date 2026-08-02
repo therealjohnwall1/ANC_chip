@@ -70,9 +70,101 @@ def _safe_attenuation(x: np.ndarray, res: np.ndarray) -> float:
     return float(np.log10(ratio))
 
 
+def fft_spectrum(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
+    """
+    One-sided magnitude spectrum of x, in dB (20*log10|X(f)|, floor-clipped).
+    """
+    n = len(x)
+    spectrum = np.fft.rfft(x)
+    freqs = np.fft.rfftfreq(n, d=1.0 / fs)
+    mag_db = 20 * np.log10(np.clip(np.abs(spectrum) / n, 1e-12, None))
+    return freqs, mag_db
+
+
+def band_attenuation(
+    d: np.ndarray, e: np.ndarray, fs: float, bands: list[tuple[float, float]]
+) -> dict[str, float]:
+    """
+    Attenuation (same log10 power-ratio convention as calc_attenuation),
+    computed separately per frequency band instead of over the whole signal
+    -- overall attenuation can hide poor cancellation in a specific band
+    (e.g. strong below 300 Hz, weak above 1 kHz).
+
+    Args:
+        d: noise before cancellation
+        e: residual after cancellation
+        fs: sampling rate, Hz
+        bands: (low_hz, high_hz) edges, e.g. [(0, 500), (500, np.inf)]
+    """
+    n = min(len(d), len(e))
+    freqs = np.fft.rfftfreq(n, d=1.0 / fs)
+    D = np.fft.rfft(d[:n])
+    E = np.fft.rfft(e[:n])
+
+    result = {}
+    for low, high in bands:
+        mask = (freqs >= low) & (freqs < high)
+        label = f"{low:g}-{high:g}Hz" if np.isfinite(high) else f">{low:g}Hz"
+
+        with np.errstate(over="ignore", invalid="ignore"):
+            p_before = np.sum(np.abs(D[mask]) ** 2)
+            p_after = np.sum(np.abs(E[mask]) ** 2)
+            ratio = p_before / p_after
+
+        result[label] = float(np.log10(ratio)) if np.isfinite(ratio) and ratio > 0 else np.nan
+
+    return result
+
+
+def plot_fft_comparison(ax, d: np.ndarray, e_by_label: dict[str, np.ndarray], fs: float, colors=None):
+    """
+    Overlay the reference noise's spectrum against each config's residual
+    spectrum -- shows which frequencies actually got cancelled (real ANC
+    doesn't cancel all frequencies equally), not just the aggregate dB number.
+    """
+    freqs_d, d_db = fft_spectrum(d, fs)
+    ax.plot(freqs_d, d_db, color="black", linewidth=1.5, label="d (before)")
+
+    colors = colors if colors is not None else [None] * len(e_by_label)
+    for (label, e), color in zip(e_by_label.items(), colors):
+        freqs_e, e_db = fft_spectrum(e, fs)
+        ax.plot(freqs_e, e_db, color=color, alpha=0.8, linewidth=0.9, label=f"e ({label})")
+
+    ax.set_title("Spectrum: before (d) vs after (e)")
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel("Magnitude (dB)")
+    ax.legend(fontsize=6)
+
+
+def plot_spectrograms(d: np.ndarray, e: np.ndarray, fs: float, title: str = ""):
+    """
+    Time+frequency view of d vs e -- shows how cancellation evolves as the
+    filter converges, not just the converged end state a single FFT gives.
+
+    Kept out of the sweep table on purpose: a spectrogram is a 2D-per-run
+    plot and can't be overlaid across configs the way the other panels are,
+    so tune_anc calls this once per selected config as its own figure.
+    """
+    fig, (ax_d, ax_e) = plt.subplots(1, 2, figsize=(14, 5), sharex=True, sharey=True)
+
+    ax_d.specgram(d, Fs=fs, cmap="magma")
+    ax_d.set_title(f"d (before) {title}")
+    ax_d.set_xlabel("Time (s)")
+    ax_d.set_ylabel("Frequency (Hz)")
+
+    _, _, _, im = ax_e.specgram(e, Fs=fs, cmap="magma")
+    ax_e.set_title(f"e (after) {title}")
+    ax_e.set_xlabel("Time (s)")
+
+    fig.colorbar(im, ax=[ax_d, ax_e], label="Power (dB)")
+    fig.suptitle(f"Spectrogram: before vs after cancellation {title}", fontsize=13)
+    plt.show()
+
+
 def tune_anc(
     x_ref: np.ndarray,
     d: np.ndarray,
+    fs: float,
     taps_list: list[int],
     lr_list: list[float],
     true_path: np.ndarray | None = None,
@@ -80,6 +172,8 @@ def tune_anc(
     tail_frac: float = 0.2,
     conv_tol: float = 1.5,
     normalize: bool = False,
+    bands: list[tuple[float, float]] | None = None,
+    spectrogram_configs: list[tuple[int, float]] | None = None,
 ):
     """
     Tune any noise canceling algorithm hyperparameters for optimitizing the following:
@@ -91,13 +185,16 @@ def tune_anc(
     - tracking
 
     Sweeps every (taps, lr) combo through lms_anc and plots all of the above,
-    plus the input autocorrelation matrix's eigenvalue spread, on one figure
-    so a tuning choice can be read off directly instead of from the formula
-    alone.
+    plus the input autocorrelation matrix's eigenvalue spread, before/after
+    FFT spectra, and band-limited attenuation, on one figure so a tuning
+    choice can be read off directly instead of from the formula alone.
+    Spectrograms (time+frequency) are plotted separately per selected config,
+    since a 2D-per-run plot can't overlay across configs like the rest can.
 
     Args:
         x_ref: reference mic signal
         d: noise as it arrives at the error mic (desired/target signal)
+        fs: sampling rate, Hz -- needed to label the spectral plots in Hz
         taps_list: filter lengths to sweep
         lr_list: learning rates to sweep
         true_path: ground-truth primary-path FIR coefficients, if known
@@ -108,10 +205,15 @@ def tune_anc(
         conv_tol: convergence band, as a multiple of the steady-state MSE
         normalize: NLMS mode, passed straight through to lms_anc -- same
                    sweep/metrics/plots, just with per-step normalized lr
+        bands: frequency bands for band_attenuation, defaults to
+               [(0, 500), (500, fs/2)] (below/above 500 Hz)
+        spectrogram_configs: which (taps, lr) configs to render spectrograms
+                              for; defaults to just the best stable config
 
     Returns:
         dict keyed by (taps, lr) with the raw per-run metrics/curves
     """
+    bands = bands if bands is not None else [(0, 500), (500, fs / 2)]
     configs = [(taps, lr) for taps in taps_list for lr in lr_list]
     results = {}
 
@@ -148,9 +250,11 @@ def tune_anc(
             msd = np.sum((w_history - w_opt) ** 2, axis=1)
 
         eigvals, spread = eigenvalue_spread(x_ref, taps)
+        band_atten = band_attenuation(d_out, e, fs, bands)
 
         results[(taps, lr)] = dict(
             e=e,
+            d_out=d_out,
             mse_smoothed=mse_smoothed,
             rolling_attenuation=rolling_attenuation,
             steady_state_mse=steady_state_mse,
@@ -161,18 +265,40 @@ def tune_anc(
             msd=msd,
             eigvals=eigvals,
             spread=spread,
+            band_atten=band_atten,
         )
 
     mode = "NLMS" if normalize else "LMS"
-    _plot_tuning_table(results, window=window, mode=mode)
+    _plot_tuning_table(results, d, fs, window=window, mode=mode)
+
+    if spectrogram_configs is None:
+        spectrogram_configs = [_best_stable_config(results)]
+
+    for taps, lr in spectrogram_configs:
+        r = results[(taps, lr)]
+        plot_spectrograms(r["d_out"], r["e"], fs, title=f"[{mode}, {_label(taps, lr)}]")
 
     return results
 
 
-def _plot_tuning_table(results: dict, window: int, mode: str = "LMS"):
-    fig, axes = plt.subplots(2, 4, figsize=(20, 9))
+def _best_stable_config(results: dict) -> tuple[int, float]:
+    stable = {c: r for c, r in results.items() if r["stable"]}
+    pool = stable or results
+
+    def score(c):
+        val = pool[c]["steady_state_attenuation"]
+        return val if np.isfinite(val) else -np.inf
+
+    return max(pool, key=score)
+
+
+def _plot_tuning_table(results: dict, d: np.ndarray, fs: float, window: int, mode: str = "LMS"):
+    fig, axes = plt.subplots(3, 4, figsize=(20, 13))
     ax_atten, ax_mse, ax_wnorm, ax_msd = axes[0]
     ax_atten_bar, ax_misadj_bar, ax_conv_bar, ax_eig = axes[1]
+    ax_fft, ax_band, ax_spare1, ax_spare2 = axes[2]
+    ax_spare1.axis("off")
+    ax_spare2.axis("off")
 
     configs = list(results.keys())
     colors = plt.cm.viridis(np.linspace(0, 0.9, max(len(configs), 1)))
@@ -253,6 +379,23 @@ def _plot_tuning_table(results: dict, window: int, mode: str = "LMS"):
     ax_eig.set_ylabel("Eigenvalue")
     ax_eig.set_yscale("log")
     ax_eig.legend(fontsize=7)
+
+    e_by_label = {_label(t, lr): results[(t, lr)]["e"] for t, lr in configs}
+    plot_fft_comparison(ax_fft, d, e_by_label, fs, colors=colors)
+
+    band_labels = list(next(iter(results.values()))["band_atten"].keys())
+    n_bands = len(band_labels)
+    width = 0.8 / n_bands
+    for bi, band_label in enumerate(band_labels):
+        values = [results[c]["band_atten"][band_label] for c in configs]
+        offset = (bi - (n_bands - 1) / 2) * width
+        ax_band.bar(x_pos + offset, values, width=width, label=band_label)
+
+    ax_band.set_title("Band-limited attenuation")
+    ax_band.set_xticks(x_pos)
+    ax_band.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
+    ax_band.set_ylabel("Attenuation (log10 P_d/P_e)")
+    ax_band.legend(fontsize=7)
 
     fig.suptitle(f"ANC tuning sweep: taps x lr ({mode})", fontsize=14)
     plt.tight_layout()
