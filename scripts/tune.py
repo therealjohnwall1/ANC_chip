@@ -79,6 +79,7 @@ def tune_anc(
     window: int = 50,
     tail_frac: float = 0.2,
     conv_tol: float = 1.5,
+    normalize: bool = False,
 ):
     """
     Tune any noise canceling algorithm hyperparameters for optimitizing the following:
@@ -105,6 +106,8 @@ def tune_anc(
         tail_frac: trailing fraction of the run treated as "steady state"
                    for misadjustment/attenuation
         conv_tol: convergence band, as a multiple of the steady-state MSE
+        normalize: NLMS mode, passed straight through to lms_anc -- same
+                   sweep/metrics/plots, just with per-step normalized lr
 
     Returns:
         dict keyed by (taps, lr) with the raw per-run metrics/curves
@@ -113,7 +116,7 @@ def tune_anc(
     results = {}
 
     for taps, lr in configs:
-        x_out, d_out, y, e, w_history = lms_anc(x_ref, d, taps, lr)
+        x_out, d_out, y, e, w_history = lms_anc(x_ref, d, taps, lr, normalize=normalize)
         w_history = np.array(w_history[1:])  # drop initial-zeros entry, align with e
 
         tail = max(1, int(len(e) * tail_frac))
@@ -160,12 +163,13 @@ def tune_anc(
             spread=spread,
         )
 
-    _plot_tuning_table(results, window=window)
+    mode = "NLMS" if normalize else "LMS"
+    _plot_tuning_table(results, window=window, mode=mode)
 
     return results
 
 
-def _plot_tuning_table(results: dict, window: int):
+def _plot_tuning_table(results: dict, window: int, mode: str = "LMS"):
     fig, axes = plt.subplots(2, 4, figsize=(20, 9))
     ax_atten, ax_mse, ax_wnorm, ax_msd = axes[0]
     ax_atten_bar, ax_misadj_bar, ax_conv_bar, ax_eig = axes[1]
@@ -250,6 +254,6 @@ def _plot_tuning_table(results: dict, window: int):
     ax_eig.set_yscale("log")
     ax_eig.legend(fontsize=7)
 
-    fig.suptitle("ANC tuning sweep: taps x lr", fontsize=14)
+    fig.suptitle(f"ANC tuning sweep: taps x lr ({mode})", fontsize=14)
     plt.tight_layout()
     plt.show()

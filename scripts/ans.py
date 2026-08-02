@@ -19,7 +19,7 @@ def calc_attenuation(x: np.ndarray, res: np.ndarray) -> float:
     return math.log10(P_before / P_after)
 
 
-def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, normalize=False):
+def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, normalize: bool = False):
     """
     LMS adaptive filter reframed as feedforward ANC (no secondary path yet)
 
@@ -32,6 +32,8 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, normalize=False)
         d: noise as it arrives at the error mic (through the primary path)
         taps: number of filter coefficients (FIR filter order)
         lr: learning rate / step size
+        normalize: NLMS mode -- scale lr per-step by 1/(power of the current
+                   input window), instead of using a fixed step size (LMS)
 
     Returns:
         x, d: inputs, sliced to align with y/e (first `taps` samples dropped,
@@ -57,12 +59,13 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, normalize=False)
 
         y[i - taps] = y_hat
         e[i - taps] = error
-        
-        if normalize:
-            x_power = np.mean(np.abs(x)**2)
-            lr = lr/(x_power + epsil)
 
-        w_n = lms_step(x_window, error, w_n, lr)
+        step_lr = lr
+        if normalize:
+            x_power = np.mean(x_window ** 2)
+            step_lr = lr / (x_power + epsil)
+
+        w_n = lms_step(x_window, error, w_n, step_lr)
         w_history.append(w_n.copy())
 
     return x[taps:], d[taps:], y, e, w_history
