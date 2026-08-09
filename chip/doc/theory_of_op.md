@@ -38,5 +38,32 @@ parameters
 |---|---|
 | mu | step size / learning rate, controls how fast the weights adapt, too high causes instability, too low causes slow convergence |
 
+## Design Goals/questions
+- these objectives/goals were created in order to spec out/design the chip without going in a loop, below are the questions and answers(Shoutout claude for the questions)
+
+- Q:What is the target attenuation, what frequency bands?
+- A: 0-1 khz, around 15-25 db attn. 1-2 khz, 5-10db attn. 
+    Signal band is 0-2khz, meaning min rate is 4khz. However the fold point on a 4khz is 2khz, basically this means theres no room for a anti-aliasing filter,
+    a analog filter needs a transition band to let the signals through, not a absolute number. Basically a filter that could filter right up to 2khz and blocks everything
+    is impossible.
+    Energy above 2khz will alias onto 0-2khz band. Switching to 16khz(nyquist 8) gives 2-8khz as a transition band for the anti-aliasing to work.
+
+- Q:What is the physical form factor, which gives you reference-to-error mic spacing, which gives you a latency budget in microseconds.
+- A: airpods require ~100khz range(lowk should do ngl).
+
+## External Behavior
+- The system will sample/take in a digital signal at 16khz, the internal clock runs at 66 Mhz giving the chip 4125 cycles to compute for each sample. 
+Knowing this, an optimal fold ratio will use the most of these cycles will minimizing the total # of multpliers.
+For an estimate solving this inequality for our M folds.
+
+$$
+\lceil \frac{3N * \text{cycles per MAC}}{M} \rceil = 4125
+$$
+
+
+## Internal Behavior
+
+
+## Bit width/formats ans reasoning
 
 

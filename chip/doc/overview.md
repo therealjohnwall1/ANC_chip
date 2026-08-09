@@ -29,5 +29,6 @@ These should be completed before adding advanced adaptation features.
 | Faults, status and interrupts | Sticky flags for protocol error, invalid config, overrun, deadline miss, clipping, overflow, calibration failure, illegal state. |
 | Basic observability and test modes | Read current state, last output, selected coefficient, accumulator snapshot, error power; impulse/constant/PRBS injection and digital loopback. |
 
+If this is unfamilar, a demo/simulation in [`scripts/ans.py`](../../scripts/ans.py) shows the full algorithm at work.
 
-
+## ANC 
