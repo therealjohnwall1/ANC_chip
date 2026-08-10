@@ -41,6 +41,13 @@ parameters
 ## Design Goals/questions
 - these objectives/goals were created in order to spec out/design the chip without going in a loop, below are the questions and answers(Shoutout claude for the questions)
 
+- Q: what is tile budget, and what types
+- A: 700 pound per analog/digital tile, analog pin cost 600 pound bro please :(
+    Fits around 1000 digital logic gates, flops take more area up then combinationals
+    Based on this requirement I will need to limit my sampling rate and how short my impulse response time is, the shorter it is(faster convergence but it linearly relates
+    to the number of taps(N) i will use)
+    From this requirement first revision will try to use Q15.1 point(16 bit wide) registers to save space
+
 - Q:What is the target attenuation, what frequency bands?
 - A: 0-1 khz, around 15-25 db attn. 1-2 khz, 5-10db attn. 
     Signal band is 0-2khz, meaning min rate is 4khz. However the fold point on a 4khz is 2khz, basically this means theres no room for a anti-aliasing filter,
@@ -59,6 +66,24 @@ For an estimate solving this inequality for our M folds.
 $$
 \lceil \frac{3N * \text{cycles per MAC}}{M} \rceil = 4125
 $$
+
+- locking in 16khz, W(z) span, S(z) span, and the word width will need to be chosen next.
+- W(z) span: how long an impulse response the adaptive FIR can represent
+- S(z) span: when sending an impulse to the DAC, speaker(anti-noise) will fire and the sound will propgate to the mic. It will get altered doing so, this is how long from the first
+arrival till the response is usable.
+
+- Note: Span is N = time * f_s, the longer span the more taps will be needed in the array
+Knowing this we want our W(z) to be larger then S(z), also S(z) will be directly related too $\theta_s$, how long the acoustic path rings for after noise is sent through it.
+Since idk the hw enclosure setup for this, I will choose TODO: fill this out ngl idk what to put
+
+t_w = K * t_s
+K should be tuned(its prob gonna be 2 cuz of budget)
+t_w is the memory horizon time, how far back in the past can it recall samples, this is why t_w > t_s, an echo that arrives t_s after an impulse was caused by a reference t_s ago, to cancel it the
+filter should have that sample in reach. Plots in scripts/ans show these relation along with tiles used.
+
+
+
+
 
 
 ## Internal Behavior
