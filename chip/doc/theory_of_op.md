@@ -46,10 +46,10 @@ parameters
     Fits around 1000 digital logic gates, flops take more area up then combinationals
     Based on this requirement I will need to limit my sampling rate and how short my impulse response time is, the shorter it is(faster convergence but it linearly relates
     to the number of taps(N) i will use)
-    From this requirement first revision will try to use Q15.1 point(16 bit wide) registers to save space
+    From this requirement first revision will try to use Q1.15 point(16 bit wide) registers to save space
 
 - Q:What is the target attenuation, what frequency bands?
-- A: 0-1 khz, around 15-25 db attn. 1-2 khz, 5-10db attn. 
+- A: 0-1 khz, around 15-25 db attn. 1-2 khz, 5-10db attn.
     Signal band is 0-2khz, meaning min rate is 4khz. However the fold point on a 4khz is 2khz, basically this means theres no room for a anti-aliasing filter,
     a analog filter needs a transition band to let the signals through, not a absolute number. Basically a filter that could filter right up to 2khz and blocks everything
     is impossible.
@@ -59,7 +59,7 @@ parameters
 - A: airpods require ~100khz range(lowk should do ngl).
 
 ## External Behavior
-- The system will sample/take in a digital signal at 16khz, the internal clock runs at 66 Mhz giving the chip 4125 cycles to compute for each sample. 
+- The system will sample/take in a digital signal at 16khz, the internal clock runs at 66 Mhz giving the chip 4125 cycles to compute for each sample.
 Knowing this, an optimal fold ratio will use the most of these cycles will minimizing the total # of multpliers.
 For an estimate solving this inequality for our M folds.
 
@@ -76,7 +76,11 @@ arrival till the response is usable.
 Knowing this we want our W(z) to be larger then S(z), also S(z) will be directly related too $\theta_s$, how long the acoustic path rings for after noise is sent through it.
 Since idk the hw enclosure setup for this, I will choose TODO: fill this out ngl idk what to put
 
-t_w = K * t_s
+- T_s: secondary path ring duration, physical property of enclosure(will get this number from physical setup)
+how long the acoustic impulse response of the secondary path S(z) (speaker → error mic) takes to ring down
+- T_w: control filter memory horizon, design choice, the length of memory that W(z) spans
+T_w = K * t_s
+
 K should be tuned(its prob gonna be 2 cuz of budget)
 t_w is the memory horizon time, how far back in the past can it recall samples, this is why t_w > t_s, an echo that arrives t_s after an impulse was caused by a reference t_s ago, to cancel it the
 filter should have that sample in reach. Plots in scripts/ans show these relation along with tiles used.
@@ -84,11 +88,28 @@ filter should have that sample in reach. Plots in scripts/ans show these relatio
 
 
 
+## Bit width/tap lengths and reasoning
+- **Sample rate**:16khz, reasoning above
+- **word length: 16 bit, simplest place to start off with, used fixed point operation q1.15 meaing the implementation of the
+algorithm will need to change to support this
 
+TODO: speccing out size for this in ../scripts/audio_sim
+- **W(z) span**:
+- **S(z) span**:
 
 ## Internal Behavior
+- internal FSM hw will be implemented and driven from a microcontroller
+- Reasons for init state:
+    - need to init and clear the values in the taps, reason why init is needed
+    - estimate $\hat{S}$, the secondary path, in the calculation this value is never updated, should also not be hardcoded in incase anything else changes
+    - **decision choice**: can you store a converged secondary path estimate once in non volatile memory instead of having to calculate everytime on power up?
+- State machine diagram:
+power -> reset -> init(maybe merge the two) -> sample_start -> power off(idk if needed)
+TODO: turn into mermaid diagram
 
 
-## Bit width/formats ans reasoning
+
+
+
 
 
