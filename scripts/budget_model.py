@@ -9,22 +9,28 @@ verified (OpenLane reports, TT docs) before trusting any conclusion.
 """
 
 from dataclasses import dataclass, replace
+import os
+
 import numpy as np
 import matplotlib.pyplot as plt
+
+# Plots go next to this module, not into whatever directory it was launched
+# from -- the savefig calls below used bare relative paths and followed cwd.
+OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 
 
 # ---------------------------------------------------------------------------
 # Technology / platform constants  -- VERIFY THESE
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(frozen=True)   # constants holder; frozen so it can be a field default
 class Tech:
     f_clk_hz: float = 66.5e6      # core clock
     ge_per_dff: float = 6.0       # sky130 DFF in NAND2-equivalents
     ge_multiplier: float = 1200.0 # 16x16 array multiplier
     ge_fixed: float = 800.0       # FSM + accumulator + MMIO + misc
     ge_per_tile: float = 1900.0   # TinyTapeout tile capacity  <-- softest number
-    max_tiles: int = 16           # 8x2 shuttle limit
+    max_tiles: int | None = 16    # 8x2 shuttle limit; None = no area ceiling (FPGA)
 
     def ge_multiplier_scaled(self, width_bits: int) -> float:
         """Multiplier area is roughly quadratic in operand width."""
@@ -32,6 +38,12 @@ class Tech:
 
 
 TECH = Tech()
+
+# Prototyping on an FPGA: tile count is still reported, because it is what an
+# eventual ASIC would cost, but it stops being a constraint. What still binds
+# is the cycle budget -- the MAC chain has to finish inside one sample period
+# no matter what fabric it runs on.
+FPGA = replace(TECH, max_tiles=None)
 
 
 # ---------------------------------------------------------------------------
@@ -50,10 +62,12 @@ class Budget:
     utilization: float  # macs / cycles_avail, as a fraction
     latency_us: float   # MAC-phase compute latency
     sample_period_us: float
+    tech: Tech = TECH   # the technology this budget was priced against
 
     @property
     def fits_area(self) -> bool:
-        return self.tiles <= TECH.max_tiles
+        # None means no area ceiling (FPGA prototype), so area never binds.
+        return self.tech.max_tiles is None or self.tiles <= self.tech.max_tiles
 
     @property
     def fits_cycles(self) -> bool:
@@ -99,14 +113,16 @@ def budget(tau_w_s: float,
         cycles_avail=cycles_avail, utilization=utilization,
         latency_us=mac_cycles / tech.f_clk_hz * 1e6,
         sample_period_us=1e6 / f_s_hz,
+        tech=tech,
     )
 
 
 def report(label: str, b: Budget) -> None:
     flag = "OK " if b.feasible else "XX "
+    ceiling = "inf" if b.tech.max_tiles is None else str(b.tech.max_tiles)
     print(f"{flag}{label}")
     print(f"     N={b.N:4d}  M={b.M:4d}  flops={b.flops:6d}  GE={b.ge:9,.0f}")
-    print(f"     tiles={b.tiles:3d}/{TECH.max_tiles}   "
+    print(f"     tiles={b.tiles:3d}/{ceiling}   "
           f"MACs={b.macs:5d}/{b.cycles_avail:7.0f} cycles "
           f"({b.utilization*100:5.1f}%)")
     print(f"     compute latency {b.latency_us:6.2f} us  "
@@ -263,19 +279,21 @@ if __name__ == "__main__":
         n = b.N if b else 0
         print(f"  f_s={fs/1e3:6.0f} kHz -> tau_max={t*1e3:6.3f} ms  (N={n})")
 
+    os.makedirs(OUT_DIR, exist_ok=True)
+
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     plot_vs_fs(2e-3, 1e-3, 16, ax=axes[0])
     plot_vs_fs(0.4e-3, 0.2e-3, 16, ax=axes[1])
     plt.tight_layout()
-    plt.savefig("budget_vs_fs.png", dpi=140)
+    plt.savefig(os.path.join(OUT_DIR, "budget_vs_fs.png"), dpi=140)
 
     plot_feasible_region()
     plt.tight_layout()
-    plt.savefig("budget_feasible_region.png", dpi=140)
+    plt.savefig(os.path.join(OUT_DIR, "budget_feasible_region.png"), dpi=140)
 
     plot_taps_vs_width()
     plt.tight_layout()
-    plt.savefig("budget_taps_vs_width.png", dpi=140)
+    plt.savefig(os.path.join(OUT_DIR, "budget_taps_vs_width.png"), dpi=140)
 
     print("\nwrote budget_vs_fs.png, budget_feasible_region.png, "
           "budget_taps_vs_width.png")

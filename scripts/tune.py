@@ -67,7 +67,7 @@ def _safe_attenuation(x: np.ndarray, res: np.ndarray) -> float:
         ratio = p_before / p_after
     if not np.isfinite(ratio) or ratio <= 0:
         return np.nan
-    return float(np.log10(ratio))
+    return float(10.0 * np.log10(ratio))
 
 
 def fft_spectrum(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
@@ -111,7 +111,7 @@ def band_attenuation(
             p_after = np.sum(np.abs(E[mask]) ** 2)
             ratio = p_before / p_after
 
-        result[label] = float(np.log10(ratio)) if np.isfinite(ratio) and ratio > 0 else np.nan
+        result[label] = float(10.0 * np.log10(ratio)) if np.isfinite(ratio) and ratio > 0 else np.nan
 
     return result
 

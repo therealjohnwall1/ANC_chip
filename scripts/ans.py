@@ -14,13 +14,15 @@ def calc_attenuation(x: np.ndarray, res: np.ndarray) -> float:
         res: x - residual error
     """
 
-    P_before = np.sum(np.abs(x) ** 2)  # db
-    P_after = np.sum(np.abs(res) ** 2)  # db
+    P_before = np.sum(np.abs(x) ** 2)
+    P_after = np.sum(np.abs(res) ** 2)
 
-    return math.log10(P_before / P_after)
+    # 10*log10 because these are already powers, not amplitudes. Without the
+    # factor of 10 this returns bels, and a 20 dB target reads as 2.0.
+    return 10.0 * math.log10(P_before / P_after)
 
 
-def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarray = None, s_hat_taps: np.ndarray = None, normalize: bool = False):
+def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarray = None, s_hat_taps: np.ndarray = None, normalize: bool = False, keep_history: bool = True):
 
     """
     FxLMS adaptive filter reframed as feedforward ANC
@@ -62,6 +64,11 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarr
         normalize: NLMS mode -- scale lr per-step by 1/(power of the current
                    filtered-reference window), instead of using a fixed step
                    size (LMS)
+        keep_history: record w_n after every step. Costs n*taps floats, which
+                   is fine for a single run and is hundreds of MB once a sweep
+                   reaches ~1000 taps over tens of thousands of samples. Set
+                   False when only the residual is wanted; w_history then comes
+                   back holding just the final weights.
 
     Returns:
         x, d: inputs, sliced to align with y/e (first `taps` samples dropped,
@@ -81,8 +88,12 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarr
     n = len(x)
     w_n = np.zeros(taps)
 
-    # filtered reference x_filt[n] = (Shat(z) * x)[n], used for the gradient only
-    x_filt = FIR_filter(x, s_hat_taps)
+    # filtered reference x_filt[n] = (Shat(z) * x)[n], used for the gradient only.
+    # np.convolve rather than FIR_filter: identical output (FIR_filter's own
+    # docstring says so), but FIR_filter is an explicit O(n*len(s_hat)) Python
+    # loop kept as the golden model for RTL, and at sweep sizes that precompute
+    # alone runs into millions of interpreted iterations.
+    x_filt = np.convolve(x, s_hat_taps)[:len(x)]
 
     y = np.empty(n - taps)
     e = np.empty(n - taps)
@@ -107,11 +118,21 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarr
 
         step_lr = lr
         if normalize:
-            x_filt_power = np.mean(x_filt_window ** 2)
-            step_lr = lr / (x_filt_power + epsil)
+            # NLMS divides by the window ENERGY, sum(x^2), not its mean power.
+            # Dividing by the mean leaves a factor of `taps` in the effective
+            # step, so a step size that is stable at 16 taps is 32x too large at
+            # 512 and the filter diverges -- which defeats the point of
+            # normalizing, since the whole reason to use NLMS in a tap sweep is
+            # to make lr mean the same thing at every filter length.
+            x_filt_energy = np.dot(x_filt_window, x_filt_window)
+            step_lr = lr / (x_filt_energy + epsil)
         
         # update step in grad descent
         w_n = lms_step(x_filt_window, error, w_n, step_lr)
-        w_history.append(w_n.copy())
+        if keep_history:
+            w_history.append(w_n.copy())
+
+    if not keep_history:
+        w_history = [w_n.copy()]
 
     return x[taps:], d[taps:], y, e, w_history
