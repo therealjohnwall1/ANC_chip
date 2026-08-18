@@ -1,5 +1,11 @@
 from dataclasses import dataclass
+import math
+
 import numpy as np
+
+# Reflections below this are treated as gone; sets how deep the image sum
+# has to run before generate_ir will trust the tail.
+_TAIL_FLOOR = 1e-3  # -60 dB
 
 @dataclass
 class Duct:
@@ -41,8 +47,19 @@ def _images(src: float, duct_len: float, end_coeff: float, entrance_coeff: float
     """
     1D image-source expansion of a duct of length L with a reflector at each end.
 
-    Replacing solving for wave equations, just estimate it using 1d waves
+    Replacing solving for wave equations, just estimate it using 1d waves.
+    The analytic image set is {2kL +/- src}; the two chains below (first bounce
+    off the far end, first bounce off the entrance) walk it outward in
+    increasing reflection order, so the first time a position shows up it
+    carries the fewest bounces and therefore the right amplitude.
+
+    Coincident images are dropped. This matters when src sits *on* a reflector
+    (ref_mic at x=0, the default): there -src == src, so both chains trace the
+    same positions and every image would otherwise be emitted twice with two
+    different reflection orders -- the direct arrival would come out as
+    1 + g instead of 1.
     """
+    seen = {round(src, 9)}
     yield src, 1.0
 
     for first_bounce_at_end in (True, False):
@@ -56,6 +73,11 @@ def _images(src: float, duct_len: float, end_coeff: float, entrance_coeff: float
                 pos = -pos
                 amp *= entrance_coeff
             at_end = not at_end
+
+            key = round(pos, 9)
+            if key in seen:
+                continue  # keep walking the chain, its later images may still be new
+            seen.add(key)
             yield pos, amp
 
 
@@ -80,13 +102,18 @@ def _add_delayed_impulse(ir: np.ndarray, delay: float, amp: float, half_width: i
     t = delay - idx  
 
     window = 0.5 * (1.0 + np.cos(np.pi * t / half_width))
-    kernel = amp * np.sinc(t) * window
+    kernel = np.sinc(t) * window
+    # An unwindowed sinc sums to 1 over the integers, so it passes DC untouched.
+    # Hann-windowing it costs up to ~4% of that at half-sample delays, which
+    # would show up as a delay-dependent gain ripple on every arrival. Rescale
+    # to put the DC gain back exactly on amp.
+    kernel *= amp / kernel.sum()
 
     keep = (idx >= 0) & (idx < len(ir))  
     np.add.at(ir, idx[keep], kernel[keep])
 
 
-def generate_ir(config: Duct, reflection_coeff, n_reflections, ir_len,
+def generate_ir(config: Duct, reflection_coeff: float, n_reflections: int, ir_len: int,
                 src: float = None, dst: float = None, entrance_coeff: float = None) -> np.ndarray:
     """
     1D waveguide (image-source) impulse response between two points in the duct.
@@ -116,7 +143,9 @@ def generate_ir(config: Duct, reflection_coeff, n_reflections, ir_len,
         entrance_coeff: g at x = 0, defaults to reflection_coeff
 
     Returns:
-        impulse response, length ir_len, direct arrival normalized to 1.0
+        impulse response, length ir_len. The direct arrival carries unit
+        amplitude, but it is spread over a sinc kernel, so the peak *sample*
+        sits below 1.0 whenever the arrival lands between samples.
     """
     if src is None:
         src = config.speaker
@@ -126,6 +155,18 @@ def generate_ir(config: Duct, reflection_coeff, n_reflections, ir_len,
         entrance_coeff = reflection_coeff
 
     assert abs(reflection_coeff) < 1 and abs(entrance_coeff) < 1, "reflections must lose energy or the duct rings forever"
+
+    # If g^n_reflections is still audible we have truncated the response by
+    # reflection count instead of by physics, and every tau downstream is short.
+    g_max = max(abs(reflection_coeff), abs(entrance_coeff))
+    tail = g_max ** n_reflections
+    if tail >= _TAIL_FLOOR:
+        needed = math.ceil(math.log(_TAIL_FLOOR) / math.log(g_max))
+        raise AssertionError(
+            f"n_reflections={n_reflections} leaves the tail at {20 * math.log10(tail):.1f} dB "
+            f"for g={g_max}; need n_reflections >= {needed} to get under "
+            f"{20 * math.log10(_TAIL_FLOOR):.0f} dB"
+        )
 
     ir = np.zeros(ir_len)
     samples_per_meter = config.fs / config.speed_sound
@@ -139,13 +180,13 @@ def generate_ir(config: Duct, reflection_coeff, n_reflections, ir_len,
     return ir
 
 
-def secondary_path(config: Duct, reflection_coeff, n_reflections, ir_len) -> np.ndarray:
+def secondary_path(config: Duct, reflection_coeff: float, n_reflections: int, ir_len: int) -> np.ndarray:
     """S(z): speaker -> error mic, the path S_hat has to estimate."""
     return generate_ir(config, reflection_coeff, n_reflections, ir_len,
                        src=config.speaker, dst=config.error_mic)
 
 
-def primary_path(config: Duct, reflection_coeff, n_reflections, ir_len) -> np.ndarray:
+def primary_path(config: Duct, reflection_coeff: float, n_reflections: int, ir_len: int) -> np.ndarray:
     """P(z): reference mic -> error mic, the path that turns x(n) into d(n)."""
     return generate_ir(config, reflection_coeff, n_reflections, ir_len,
                        src=config.ref_mic, dst=config.error_mic)
