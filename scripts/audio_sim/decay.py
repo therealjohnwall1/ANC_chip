@@ -164,7 +164,7 @@ def envelope_tau(ir: np.ndarray, fs: float, threshold_db: float = -40.0) -> floa
 
 if __name__ == "__main__":
     import math
-    from duct import Duct, secondary_path, primary_path
+    from scripts.audio_sim.duct import Duct, secondary_path, primary_path
 
     d = Duct()
     g = 0.7
