@@ -86,7 +86,9 @@ t_w is the memory horizon time, how far back in the past can it recall samples, 
 filter should have that sample in reach. Plots in scripts/ans show these relation along with tiles used.
 
 
-
+## Duct Setup
+- noise canceling will need to happen in a physical system, duct geometry can be configured,
+however for the sake of the project I will be using 
 
 ## Bit width/tap lengths and reasoning
 - **Sample rate**:16khz, reasoning above
@@ -107,9 +109,34 @@ TODO: speccing out size for this in ../scripts/audio_sim
 power -> reset -> init(maybe merge the two) -> sample_start -> power off(idk if needed)
 TODO: turn into mermaid diagram
 
+## Viable span/tap options (measured)
 
+Swept the (N_W, M) plane over 4 duct configs, code in [`scripts/audio_sim/sweep.py`](../../scripts/audio_sim/sweep.py).
+All rows 16khz, 16 bit, 1 multiplier. tau = taps / f_s, M picked per row for the best margin over target.
+Tiles from [`scripts/budget_model.py`](../../scripts/budget_model.py), reported but not a constraint, first target is fpga.
 
+| # | duct | tau_W / N_W | tau_S / M | 0-1 khz | 1-2 khz | tiles |
+|---|---|---|---|---|---|---|
+| A | 1.2 m, g=0.7 (as built) | 16.0 ms / 256 | 16.0 ms / 256 | 20.1 | 12.7 | 53 |
+| B | 1.2 m, g=0.7 (as built) | 8.0 ms / 128 | 8.0 ms / 128 | 16.1 | 9.9 | 27 |
+| C | 1.2 m, g=0.7 (as built) | 4.0 ms / 64 | 16.0 ms / 256 | 11.0 | 5.3 | 24 |
+| D | 1.2 m, g=0.3 (damped) | 16.0 ms / 256 | 16.0 ms / 256 | 35.0 | 28.3 | 53 |
+| E | 1.2 m, g=0.3 (damped) | 8.0 ms / 128 | 16.0 ms / 256 | 26.8 | 21.4 | 34 |
+| F | 0.3 m, g=0.5 (short) | 8.0 ms / 128 | 4.0 ms / 64 | 31.7 | 20.1 | 24 |
+| G | 0.3 m, g=0.5 (short) | 4.0 ms / 64 | 4.0 ms / 64 | 26.1 | 15.2 | 14 |
+| H | 0.3 m, g=0.1 (short+damped) | 8.0 ms / 128 | 1.0 ms / 16 | 44.8* | 33.5* | 22 |
+| I | 0.3 m, g=0.1 (short+damped) | 2.0 ms / 32 | 2.0 ms / 32 | 43.6* | 33.1* | 8 |
 
+- Target is 15-25db over 0-1khz, 5-10db over 1-2khz. Every row clears it, B and C barely. Row A is the best the duct on the bench does.
+- g is the reflection coeff applied per bounce, same at both ends. Lumped stand in for termination absorption, not measured off hw yet. Highest leverage knob by far, A -> D is g 0.7 -> 0.3 for +15db on identical silicon. One round trip = two bounces, so decay is 40*log10(g) db per 2L/c.
+- \* H and I are sitting on the sim's -40db error mic noise floor(broadband ~38db). Band numbers read higher cuz a band limited measurement can dig under a broadband floor, so read them as ">= 38db", not a prediction.
 
-
-
+### Assumptions
+- sim choices not measurements, the table is only as good as these
+- 2s adaptation budget. with an exact S_hat and no sensor noise fxlms just keeps improving(512 taps hit 91db at 50s, still climbing) so theres no steady state to report. this is why every curve peaks then falls, past the peak it cant converge in time
+- -40db error mic noise floor, caps attenuation ~40db no matter the tap count
+- nlms, lr searched over (0.3, 0.1, 0.03), best stable one kept
+- real S(z) kept full length, only S_hat truncated to M
+- float64 throughout, no q1.15 anywhere. biggest un-modelled gap between this and hw
+- duct width isnt in the model at all. 1d image source assumes plane waves, only valid below f < c/2d, so width < ~86mm to cover 0-2khz or < ~21mm to cover to nyquist. nothing checks this, if the real duct is wider every tap count above is optimistic
+- causal margin scales with L, 37 taps at 1.2m and 9.3 taps(~580us) at 0.3m. adc/dac + anti aliasing delay eats straight into it, once its negative no FIR W(z) cancels anything
