@@ -22,7 +22,20 @@ def calc_attenuation(x: np.ndarray, res: np.ndarray) -> float:
     return 10.0 * math.log10(P_before / P_after)
 
 
-def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarray = None, s_hat_taps: np.ndarray = None, normalize: bool = False, keep_history: bool = True):
+def quantize(v, frac_bits: int):
+    """
+    Round to a Q1.<frac_bits> grid and saturate to [-1, 1).
+
+    Models the coefficient register only: the value is stored with frac_bits
+    of fraction, so anything finer than one LSB is lost on write. Arithmetic
+    around it stays float -- this is not a bit-accurate fixed-point model, it
+    isolates the effect of the storage grid.
+    """
+    step = 1 << frac_bits
+    return np.clip(np.round(v * step) / step, -1.0, 1.0 - 1.0 / step)
+
+
+def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarray = None, s_hat_taps: np.ndarray = None, normalize: bool = False, keep_history: bool = True, coef_quant: int = None):
 
     """
     FxLMS adaptive filter reframed as feedforward ANC
@@ -129,6 +142,12 @@ def lms_anc(x: np.ndarray, d: np.ndarray, taps: int, lr: float, s_taps: np.ndarr
         
         # update step in grad descent
         w_n = lms_step(x_filt_window, error, w_n, step_lr)
+        # Coefficient register is finite: the update is computed at full
+        # precision but only what lands on the Q1.coef_quant grid is kept.
+        # Once |delta_w| falls under half an LSB this rounds straight back to
+        # w_n and adaptation stops -- the stall this sweep is looking for.
+        if coef_quant is not None:
+            w_n = quantize(w_n, coef_quant)
         if keep_history:
             w_history.append(w_n.copy())
 

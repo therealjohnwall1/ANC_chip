@@ -165,3 +165,7 @@ Max abs values of weights and secondary path are already normalized, so we only 
 - max abs s[k]: 16 bit
 - 16 bit works, filtering is around 9 and stall is around 12, giving 4 bits of headroom for precision, however
 this should be revised and tune again if needed
+
+## accumulator width
+- acc width: 64
+- prob will never fill or even get close, this is to play it safe, super low cost
