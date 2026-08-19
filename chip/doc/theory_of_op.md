@@ -146,6 +146,8 @@ Tiles from [`scripts/budget_model.py`](../../scripts/budget_model.py), reported 
 ## Measured ranges (float64, for fixed point sizing)
 
 From [`scripts/range_check.py`](../../scripts/range_check.py). Accumulator columns are max partial sum, normalized to |x| <= 1.
+Max abs values of weights and secondary path are already normalized, so we only need to worry about precision.
+
 
 | row | max abs w[k] | max abs s_hat[k] | acc peak W.x | acc peak S.x | sum abs w[k] |
 |---|---|---|---|---|---|
@@ -159,4 +161,7 @@ From [`scripts/range_check.py`](../../scripts/range_check.py). Accumulator colum
 
 ## coefficents width
 - fp64 imppl in [`scripts/range_check.py](../../scripts/range_check.py), showed the following
-- max abs w[k]: 0
+- max abs w[k]: 16 bit
+- max abs s[k]: 16 bit
+- 16 bit works, filtering is around 9 and stall is around 12, giving 4 bits of headroom for precision, however
+this should be revised and tune again if needed

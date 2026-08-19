@@ -115,6 +115,79 @@ def report(r: dict) -> None:
         print(f"    OK  both coefficient arrays fit in Q1.x")
 
 
+def stall_check(case: Case, n_w: int, m_shat: int, base: dt.Duct, lr: float,
+                seed: int = 0, f0: float = 300.0, a_tone: float = 1.0,
+                sig: float = 0.7, tail_frac: float = 0.34) -> dict:
+    """
+    How small does the LMS weight update get once converged?
+
+    An update smaller than half an LSB of the coefficient register rounds to
+    zero, the weight stops moving, and adaptation freezes short of convergence.
+    So the smallest USEFUL update sets the fractional-bit floor for COEF_W --
+    a separate and usually tighter requirement than representing w[k] itself.
+
+    delta_w is recovered by diffing the weight history rather than recomputing
+    lr*error*x_filt, so it is exactly what lms_anc did, with no second
+    implementation to drift.
+
+    NLMS makes this measurement scale-invariant: step_lr carries 1/||x_f||^2,
+    error carries one factor of the signal scale and x_filt another, so the
+    scale cancels. The un-normalized amplitude out of generate_noise therefore
+    does not bias the answer.
+    """
+    config = case.duct(base)
+    s_taps, p_taps = _paths(config, case.g)
+    s_hat = s_taps[:max(1, m_shat)]
+    n = int(ADAPT_S * config.fs)
+
+    np.random.seed(seed)
+    x = generate_noise(config.fs, a_tone, sig, f0, n)
+    d = np.convolve(x, p_taps)[:n]
+    rms = float(np.sqrt(np.mean(d ** 2)))
+    d = d + np.random.normal(0.0, rms * 10.0 ** (NOISE_FLOOR_DB / 20.0), n)
+
+    _, _, _, e, w_hist = lms_anc(x, d, n_w, lr, s_taps=s_taps, s_hat_taps=s_hat,
+                                 normalize=True, keep_history=True)
+
+    w_arr = np.asarray(w_hist)
+    deltas = np.abs(np.diff(w_arr, axis=0))        # |delta_w| per sample, per tap
+    tail = max(1, int(len(deltas) * tail_frac))
+    conv = deltas[-tail:]                          # converged portion only
+
+    flat = conv.ravel()
+    flat = flat[flat > 0.0]
+    per_tap_rms = np.sqrt(np.mean(conv ** 2, axis=0))
+
+    return {
+        "case": case, "n_w": n_w, "lr": lr,
+        "pcts": {p: float(np.percentile(flat, p)) for p in (10, 50, 90)},
+        "max": float(np.max(flat)),
+        "per_tap_rms": per_tap_rms,
+        "min_tap_rms": float(np.min(per_tap_rms)),
+        "med_tap_rms": float(np.median(per_tap_rms)),
+    }
+
+
+def report_stall(r: dict, frac_bits=(11, 13, 15, 17, 19, 21, 23)) -> None:
+    print(f"  N_W={r['n_w']}  lr={r['lr']:.2f}   |delta_w| once converged:")
+    print(f"    p10 {r['pcts'][10]:.3e}   p50 {r['pcts'][50]:.3e}   "
+          f"p90 {r['pcts'][90]:.3e}   max {r['max']:.3e}")
+    print(f"    per-tap RMS: min {r['min_tap_rms']:.3e}  median {r['med_tap_rms']:.3e}")
+    print()
+    print(f"    {'F':>3}  {'Q1.F':>7}  {'half LSB':>10}  {'% updates':>10}  {'taps below':>11}")
+    print(f"    {'':>3}  {'':>7}  {'':>10}  {'-> 0':>10}  {'half LSB':>11}")
+    for f_bits in frac_bits:
+        half_lsb = 2.0 ** -(f_bits + 1)
+        n_below = int(np.sum(r["per_tap_rms"] < half_lsb))
+        # fraction of individual updates that round away, from the percentiles
+        upd = ("<10" if half_lsb < r["pcts"][10] else
+               "10-50" if half_lsb < r["pcts"][50] else
+               "50-90" if half_lsb < r["pcts"][90] else ">90")
+        flag = "" if n_below == 0 else "   <-- taps freeze"
+        print(f"    {f_bits:>3}  {'Q1.'+str(f_bits):>7}  {half_lsb:>10.3e}  "
+              f"{upd:>10}  {n_below:>4}/{len(r['per_tap_rms']):<6}{flag}")
+
+
 if __name__ == "__main__":
     base = dt.Duct()
     print("=" * 74)
@@ -138,3 +211,10 @@ if __name__ == "__main__":
     print(f"\n  COEF_W = Q{int_bits(peak_coef)+1}.x  (x = fractional bits, set by step 2)")
     print(f"  ACC_W  needs {int_bits(peak_acc)} integer bits above the "
           f"full-precision product's fraction")
+
+    print("\n" + "=" * 74)
+    print("Stall bound -- how many fractional bits before updates round to zero")
+    print("=" * 74)
+    for tag, r in results:
+        print(f"\nrow {tag}:  {r['case'].label}")
+        report_stall(stall_check(r["case"], r["n_w"], r["m"], base, r["lr"]))
