@@ -96,8 +96,9 @@ however for the sake of the project I will be using
 algorithm will need to change to support this
 
 TODO: speccing out size for this in ../scripts/audio_sim
-- **W(z) span**:
-- **S(z) span**:
+- **W(z) span**: 32 taps
+- **S(z) span**: 32 taps
+- reasoning shown below(config I)
 
 ## Internal Behavior
 - internal FSM hw will be implemented and driven from a microcontroller
@@ -130,6 +131,7 @@ Tiles from [`scripts/budget_model.py`](../../scripts/budget_model.py), reported 
 - Target is 15-25db over 0-1khz, 5-10db over 1-2khz. Every row clears it, B and C barely. Row A is the best the duct on the bench does.
 - g is the reflection coeff applied per bounce, same at both ends. Lumped stand in for termination absorption, not measured off hw yet. Highest leverage knob by far, A -> D is g 0.7 -> 0.3 for +15db on identical silicon. One round trip = two bounces, so decay is 40*log10(g) db per 2L/c.
 - \* H and I are sitting on the sim's -40db error mic noise floor(broadband ~38db). Band numbers read higher cuz a band limited measurement can dig under a broadband floor, so read them as ">= 38db", not a prediction.
+- **I configuration will be targeted**, however this is done in fp64 and other factors so its not finalized
 
 ### Assumptions
 - sim choices not measurements, the table is only as good as these
@@ -137,6 +139,24 @@ Tiles from [`scripts/budget_model.py`](../../scripts/budget_model.py), reported 
 - -40db error mic noise floor, caps attenuation ~40db no matter the tap count
 - nlms, lr searched over (0.3, 0.1, 0.03), best stable one kept
 - real S(z) kept full length, only S_hat truncated to M
-- float64 throughout, no q1.15 anywhere. biggest un-modelled gap between this and hw
+- use float64 in calculations
 - duct width isnt in the model at all. 1d image source assumes plane waves, only valid below f < c/2d, so width < ~86mm to cover 0-2khz or < ~21mm to cover to nyquist. nothing checks this, if the real duct is wider every tap count above is optimistic
 - causal margin scales with L, 37 taps at 1.2m and 9.3 taps(~580us) at 0.3m. adc/dac + anti aliasing delay eats straight into it, once its negative no FIR W(z) cancels anything
+
+## Measured ranges (float64, for fixed point sizing)
+
+From [`scripts/range_check.py`](../../scripts/range_check.py). Accumulator columns are max partial sum, normalized to |x| <= 1.
+
+| row | max abs w[k] | max abs s_hat[k] | acc peak W.x | acc peak S.x | sum abs w[k] |
+|---|---|---|---|---|---|
+| G (N_W=64, M=64) | 0.795 | 0.824 | 1.17 | 1.33 | 4.23 |
+| I (N_W=32, M=32) | 0.719 | 0.824 | 1.07 | 1.02 | 3.24 |
+
+## todos
+- COEFF_W: width coefficents are stored at
+- N_W_MAX, N-S_MAX ceiling on what N gets chosen
+- ACC_W: MAC accumulator width
+
+## coefficents width
+- fp64 imppl in [`scripts/range_check.py](../../scripts/range_check.py), showed the following
+- max abs w[k]: 0
