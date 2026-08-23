@@ -115,8 +115,12 @@ class Fmt:
     """
     sample: Q = Q(1, 15)     # SAMPLE_W, theory_of_op.md
     coef: Q = Q(1, 15)       # COEF_W, theory_of_op.md
+    xf: Q = Q(2, 14)         # filtered-reference register -- MEASURED, see below
+    dac: Q = Q(1, 15)        # anti_noise_o, SAMPLE_W per r_interfaces.md
     energy: Q = Q(34, 30)    # see notes below -- shares the accumulator
     step: Q = Q(15, 17)      # OPEN, see notes below
+    lr: Q = Q(1, 15)         # step-size register, lr <= 0.3
+    eps: Q = Q(1, 23)        # NLMS regularizer -- needs >=17 frac bits for 1e-5
     acc_w: int = ACC_W
 
     rounding: str = ROUND_NEAREST
@@ -162,7 +166,8 @@ DEFAULT = Fmt()
 # Sized so its own grid (2^-56) is finer than float64's spacing near 1.0
 # (~2^-52), which is what makes "golden at WIDE == the float reference" a
 # statement about the layer split rather than about this format's precision.
-WIDE = Fmt(sample=Q(8, 56), coef=Q(8, 56), energy=Q(16, 112), step=Q(24, 72),
+WIDE = Fmt(sample=Q(8, 56), coef=Q(8, 56), xf=Q(8, 56), dac=Q(8, 56),
+           energy=Q(16, 112), step=Q(24, 72), lr=Q(8, 56), eps=Q(8, 56),
            acc_w=128)
 
 
@@ -204,6 +209,30 @@ def to_coef(value, fmt: Fmt = DEFAULT, *, where: str = "coef") -> Fxp:
     that want to know check `saturated()`.
     """
     return to(value, fmt.coef, fmt, where=where, allow_saturation=True)
+
+
+def to_xf(value, fmt: Fmt = DEFAULT, *, where: str = "x_f") -> Fxp:
+    """
+    Quantize into the filtered-reference register.
+
+    Saturation raises rather than clamping. x_f is the multiplicand in the LMS
+    gradient, so clipping it does not distort an output someone can hear -- it
+    corrupts the direction the filter is adapting in, silently, and shows up
+    much later as "it converges worse than the float model". That is worth an
+    exception rather than a clamp.
+    """
+    return to(value, fmt.xf, fmt, where=where)
+
+
+def to_dac(value, fmt: Fmt = DEFAULT, *, where: str = "anti_noise_o") -> Fxp:
+    """
+    Quantize into the DAC output register.
+
+    Saturation is permitted: a converter clips, that is what converters do, and
+    the caller is handed a flag so a clip can be counted (r_interfaces.md has a
+    CLIP status bit for exactly this).
+    """
+    return to(value, fmt.dac, fmt, where=where, allow_saturation=True)
 
 
 def mul(a: Fxp, b: Fxp) -> Fxp:
@@ -248,6 +277,30 @@ def assert_no_saturation(x: Fxp, *, where: str = "value", q: Q = None) -> None:
         raise SaturationError(f"{where} saturated in {q or 'format'}{rng}")
 
 
+def from_raw(raw_val: int, q: Q, fmt: Fmt = DEFAULT, *, where: str = "value",
+             allow_saturation: bool = False) -> Fxp:
+    """
+    Build an Fxp from a stored integer, with no float in the path.
+
+    The divider in update.py works in raw integers -- that is what a divider
+    does -- and its quotient has to become an Fxp without ever being a float,
+    or the 64-bit values in flight lose their low bits to float64's 53-bit
+    significand on the way through.
+    """
+    lo, hi = -(1 << (q.n_word - 1)), (1 << (q.n_word - 1)) - 1
+    if not (lo <= raw_val <= hi) and not allow_saturation:
+        raise SaturationError(
+            f"{where} raw {raw_val} outside {q} (raw range [{lo}, {hi}])")
+    out = Fxp(like=fmt.template(q))
+    out.set_val(min(max(raw_val, lo), hi), raw=True)
+    return out
+
+
+def raw_fits(raw_val: int, q: Q) -> bool:
+    """Would this stored integer fit `q` without saturating?"""
+    return -(1 << (q.n_word - 1)) <= raw_val <= (1 << (q.n_word - 1)) - 1
+
+
 def raw(x: Fxp) -> int:
     """The stored integer -- what a waveform viewer shows."""
     return int(x.raw())
@@ -276,14 +329,20 @@ BACKING = {
     "coef": "theory_of_op.md (16-bit floor)",
     "acc": "theory_of_op.md (64-bit, 'play it safe')",
     "prod": "derived: sample x coef, exact",
+    "xf": "MEASURED: max|x_f| = 1.29 (row G) -- Q1.x saturates",
+    "dac": "r_interfaces.md (SAMPLE_W) -- but max|y| = 1.13, so it clips",
     "energy": "OPEN -- no doc-assigned width",
     "step": "OPEN -- no doc-assigned width",
+    "lr": "r_interfaces.md proposes 16-bit (Q0.16 unsigned)",
+    "eps": "OPEN -- 1e-5 needs >=17 frac bits, 16-bit lands it on the LSB",
 }
 
 
 def describe(fmt: Fmt = DEFAULT) -> str:
     rows = [("sample", fmt.sample), ("coef", fmt.coef), ("prod", fmt.prod),
-            ("acc", fmt.acc), ("energy", fmt.energy), ("step", fmt.step)]
+            ("acc", fmt.acc), ("xf", fmt.xf), ("dac", fmt.dac),
+            ("energy", fmt.energy), ("step", fmt.step),
+            ("lr", fmt.lr), ("eps", fmt.eps)]
     out = [f"  {'field':<8} {'format':>10} {'bits':>5} {'resolution':>12} "
            f"{'max':>16}   backing",
            f"  {'-'*8} {'-'*10:>10} {'-'*5:>5} {'-'*12:>12} {'-'*16:>16}   {'-'*40}"]
