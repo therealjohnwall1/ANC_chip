@@ -88,7 +88,7 @@ filter should have that sample in reach. Plots in scripts/ans show these relatio
 
 ## Duct Setup
 - noise canceling will need to happen in a physical system, duct geometry can be configured,
-however for the sake of the project I will be using 
+however for the sake of the project I will be using
 
 ## Bit width/tap lengths and reasoning
 - **Sample rate**:16khz, reasoning above
@@ -154,18 +154,20 @@ Max abs values of weights and secondary path are already normalized, so we only 
 | G (N_W=64, M=64) | 0.795 | 0.824 | 1.17 | 1.33 | 4.23 |
 | I (N_W=32, M=32) | 0.719 | 0.824 | 1.07 | 1.02 | 3.24 |
 
-## todos
-- COEFF_W: width coefficents are stored at
-- N_W_MAX, N-S_MAX ceiling on what N gets chosen
-- ACC_W: MAC accumulator width
-
 ## coefficents width
 - fp64 imppl in [`scripts/range_check.py](../../scripts/range_check.py), showed the following
 - max abs w[k]: 16 bit
 - max abs s[k]: 16 bit
 - 16 bit works, filtering is around 9 and stall is around 12, giving 4 bits of headroom for precision, however
 this should be revised and tune again if needed
+- floor for now
+
 
 ## accumulator width
 - acc width: 64
 - prob will never fill or even get close, this is to play it safe, super low cost
+- floor for now
+
+## optimizer algorithm
+- support for both LMS and NLMS will be implmented, however will start off with NLMS since its easier/less resources
+to implement

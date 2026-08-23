@@ -6,6 +6,7 @@
 - `noise_constants.py` - empty, placeholder for shared constants
 - `range_check.py` - measures fp64 coefficient/accumulator ranges for fixed point sizing
 - `tune.py` - sweeps lms step size against the stability bound
+- `verify_convention.py` - proves the streaming/tap-line form of fxlms matches ans.py, pins the index convention for golden/
 - `wiener.py` - autocorrelation and lms step helpers
 
 ## audio_sim

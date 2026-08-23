@@ -1,0 +1,69 @@
+Step 0 — Pin down the reference semantics (a written note, not code)
+
+Adds: a short "conventions" section at the top of golden/README.md.
+
+Purpose: ans.py precomputes x_filt = np.convolve(x, s_hat) over the entire signal before the loop starts. Hardware can't do that — it has to produce x_f[n] sample by sample from a tap line. Before writing any code I need to state exactly what the streaming equivalent is, or every later comparison is silently off by one sample.
+
+Two specific things to nail down:
+
+- y[n] in ans.py uses the window x[i-taps : i], which is x[n-1] … x[n-N_W] — it does not include x[n]. But x_f[n] does include x[n]. Your RTL has to pick a convention and it must match this one, or golden and RTL disagree from sample zero for a reason that has nothing to do with fixed point.
+- The update at sample n uses the old w for y[n], then writes back. That ordering is the FSM's stage order.
+
+Step 1 — golden/fmt.py
+
+Adds: a Fmt dataclass (sample/coef/acc/energy/step formats, rounding mode, overflow policy) and the arithmetic primitives — to_sample, to_coef, mul, acc_add, round_to_coef, plus an assert_no_saturation helper.
+
+Purpose: every quantization decision in the whole model lives in exactly one file. When you change COEF_W from Q1.15 to Q1.23 to see what it buys, you edit one field, not five files. It's also where the overflow='saturate' / rounding='around' fxpmath settings get bound, so those RTL choices are visible in one place instead of scattered across call sites.
+
+This step will surface a decision you haven't made yet. SAMPLE_W, COEF_W, and ACC_W all have doc-assigned widths. The NLMS intermediates — the energy accumulator, the reciprocal, and step_lr — do not. Concretely: epsil = 1e-5 in ans.py, and energy for N_W=32 can reach ~50 (from range_check.py's partial-sum numbers), so energy needs ~6 integer bits. In a 16-bit register that leaves 10 fractional bits, whose LSB is ~1e-3 — which means 1e-5 quantizes to zero and your regularizer disappears. I'll expose these as explicit format fields and let golden show you the effect; picking the widths is yours.
+
+Step 2 — golden/mac.py
+
+Adds: mac_step(acc, coef, sample, fmt) -> (acc, record) and fir_sequence(coefs, window, fmt) -> (result, partials).
+
+Purpose: this is the one hardware block you'll instantiate and reuse for W(z), S_hat(z), and the energy sum. fir_sequence returns every partial sum, not just the final dot product, because range_check.py already established that the quantity which must not overflow is max|cumsum|, not max|dot|. If your RTL saturates mid-sequence, this lets you find the exact tap index rather than seeing a wrong y[n] and guessing.
+
+Step 3 — golden/fir.py
+
+Adds: filter_w(w, x_line, fmt) → y[n], and filter_shat(s_hat, x_line, fmt) → x_f[n]. Both are thin wrappers over mac.fir_sequence that apply the window convention from Step 0.
+
+Purpose: separating this from mac.py is what makes the two FIR passes independently checkable. They're the same MAC hardware, but different tap counts, different coefficient sources (W is chip-written, S_hat is MCU-written per r_interfaces.md), and different window offsets. Keeping the offset logic here and out of mac.py means an off-by-one shows up as a fir.py test failure, not as a corrupted MAC.
+
+Step 4 — golden/update.py
+
+Adds: energy(x_f_window, fmt), step_size(energy, lr, eps, fmt) (exact fixed-point divide), and update_taps(w, x_f_window, err, step, fmt) -> (w_new, per_tap_records).
+
+Purpose: this is the adaptation stage, and it's where Q1.15 coefficients are most likely to bite. range_check.py puts the quantize-stall floor near 12 fractional bits, so at Q1.15 you have ~3 bits of margin — update_taps returns per-tap records showing which updates rounded to zero, which is the stall condition made directly observable instead of inferred from an attenuation curve.
+
+Second decision this surfaces: step_lr * error * x_f[k] is a three-way product, and fixed-point multiplication isn't associative once you round between stages. (err * x_f) * step and (step * err) * x_f give different answers and different intermediate widths. I'll make the order an explicit, named choice in the code rather than an accident of how I typed it.
+
+Step 5 — golden/core.py
+
+Adds: a ChipState dataclass (raw tap line, filtered-reference line, w[], s_hat[], formats) and sample_step(state, x_sample, e_sample) -> (y, new_state, trace).
+
+Purpose: this is one sample_valid_i pulse — the FSM's entire job for one sample, in the order the RTL will execute it. It's also where the state layout gets decided, which is a deliverable in its own right: the raw tap line needs depth max(N_W + 1, N_S) (because y[n] reaches back to x[n-N_W] while x_f[n] needs x[n] itself), and the filtered line needs depth N_W. That memory sizing isn't visible anywhere in ans.py because the precomputed convolve hides it — but it's exactly what you have to instantiate in RTL.
+
+e_sample is an input, not something computed here. The chip never sees d[n] or y_sec[n].
+
+Step 6 — golden/demo.py
+
+Adds: a small hand-built state, a float_ref() that does the same sample step in plain float64, a wide-format equivalence check, and a printed trace of one sample (chainable to three).
+
+Purpose: two jobs. First, float_ref at a wide format (Q1.40, big accumulator) must match golden to ~1e-9 — that's the proof the six-layer split didn't introduce a structural bug, independent of any quantization question. Second, the printed trace is the artifact you actually diff against a waveform: every partial sum, the energy, step_lr, and per-tap before/after.
+
+Chaining three samples is enough to catch tap-line shift bugs (a state that's wrong by one sample is invisible in a single step).
+
+Step 7 — golden/README.md
+
+Adds: the conventions note from Step 0, plus a table mapping each golden function to the RTL signal or block it corresponds to, and the list of formats with which ones are doc-backed vs. still open.
+
+Purpose: so that six months from now the mapping from mac_step to a specific cycle in your waveform viewer isn't reconstructed from memory.
+
+Step 8 — Dependency + doc pointers
+
+Adds: fxpmath to a requirements.txt (I confirmed 0.4.10 installs clean — pure-Python wheel, numpy is your only transitive dep, already present), and one line in scripts/README.md pointing at golden/.
+
+Purpose: fxpmath isn't currently installed, so this has to happen before anything runs. The pointer keeps golden/ discoverable from the docs you already maintain.
+
+---
+
