@@ -29,9 +29,6 @@ step size    mu[n]  = lr / (E[n] + eps)
 update       w[k]  += mu[n] * e[n] * x_f[n-1-k]
 ```
 
-
----
-
 ## Layers
 | layer | file | RTL counterpart |
 |---|---|---|
@@ -42,7 +39,7 @@ update       w[k]  += mu[n] * e[n] * x_f[n-1-k]
 | L4 | `core.py` | top FSM, one `sample_valid_i` pulse |
 | -- | `demo.py` | single-sample propagation + float reference |
 
-### Formats
+## Formats
 
 | param | value | backing |
 |---|---|---|
