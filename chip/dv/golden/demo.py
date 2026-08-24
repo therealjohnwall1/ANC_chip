@@ -21,7 +21,7 @@ Everything here is a single sample or a short chain. There is no closed loop,
 no plant, no attenuation measurement -- those sit on top of this and are
 deliberately not built yet.
 
-Run from the repo root:  .venv/bin/python -m golden.demo
+Run from the repo root:  PYTHONPATH=.:chip/dv .venv/bin/python -m golden.demo
 """
 
 from fractions import Fraction
