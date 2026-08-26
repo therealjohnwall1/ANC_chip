@@ -17,6 +17,13 @@ module sample_in_tb;
   logic [$clog2(globals::TAP_LEN)-1:0] head_idx;
   logic [$clog2(globals::TAP_LEN)-1:0] exp_head = '0;
 
+  localparam int TAP_CNT_W = $clog2(globals::TAP_LEN);
+  logic [TAP_CNT_W-1:0] tap_sel;
+  sample_t tap_out;
+  sample_t exp_win[globals::TAP_LEN];
+  logic [INPUT_WIDTH-1:0] drv_c;
+  logic [TAP_CNT_W-1:0] scan_addr;
+
   sample_in dut (
     .clk       (clk),
     .rst_n     (rst_n),
@@ -25,7 +32,9 @@ module sample_in_tb;
     .data_in   (data_in),
     .x_n       (x_n),
     .x_n_new   (x_n_new),
-    .head_idx  (head_idx)
+    .head_idx  (head_idx),
+    .tap_sel   (tap_sel),
+    .tap_out   (tap_out)
   );
 
   initial begin
@@ -41,13 +50,14 @@ module sample_in_tb;
   task automatic drive_sample(input logic [INPUT_WIDTH-1:0] d,
                               input logic rdy,
                               input logic val);
-    data_in   <= d;
-    data_rdy  <= rdy;
-    data_valid<= val;
+    @(negedge clk);
+    data_in    = d;
+    data_rdy   = rdy;
+    data_valid = val;
     @(posedge clk);
     @(negedge clk);
-    data_rdy   <= 1'b0;
-    data_valid <= 1'b0;
+    data_rdy   = 1'b0;
+    data_valid = 1'b0;
   endtask
 
   function automatic sample_t expected(input logic [INPUT_WIDTH-1:0] d);
@@ -112,6 +122,41 @@ module sample_in_tb;
     exp_head++;
     if (head_idx !== exp_head) $fatal(1, "head_idx != %0d", exp_head);
     $display("T=%0t: 0xFFF -> x_n=%h", $time, x_n);
+
+    repeat (CYC_TB) @(posedge clk);
+
+    tap_sel <= 'd0;
+    @(negedge clk);
+    if (tap_out !== expected(12'h7FF)) $fatal(1, "tap 0 wrong");
+    $display("T=%0t: tap[0]=%h", $time, tap_out);
+    tap_sel <= 'd1;
+    @(negedge clk);
+    if (tap_out !== expected(12'h800)) $fatal(1, "tap 1 wrong");
+    $display("T=%0t: tap[1]=%h", $time, tap_out);
+    tap_sel <= 'd2;
+    @(negedge clk);
+    if (tap_out !== expected(12'h000)) $fatal(1, "tap 2 wrong");
+    $display("T=%0t: tap[2]=%h", $time, tap_out);
+    tap_sel <= 'd3;
+    @(negedge clk);
+    if (tap_out !== expected(12'hFFF)) $fatal(1, "tap 3 wrong");
+    $display("T=%0t: tap[3]=%h", $time, tap_out);
+
+    for (int n = 0; n < globals::TAP_LEN; n++) begin
+      drv_c = 12'h200 + INPUT_WIDTH'(n);
+      exp_win[exp_head] = expected(drv_c);
+      drive_sample(drv_c, 1'b1, 1'b1);
+      exp_head++;
+      if (head_idx !== exp_head) $fatal(1, "head_idx != %0d", exp_head);
+    end
+
+    for (int k = 0; k < globals::TAP_LEN; k++) begin
+      scan_addr = head_idx - 1'b1 - TAP_CNT_W'(k);
+      tap_sel <= scan_addr;
+      @(negedge clk);
+      if (tap_out !== exp_win[scan_addr]) $fatal(1, "scan mismatch k=%0d", k);
+    end
+    $display("T=%0t: full-window scan ok (newest=head_idx-1)", $time);
 
     repeat (CYC_TB) @(posedge clk);
 

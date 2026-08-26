@@ -1,6 +1,6 @@
 // block responsible for sampling in @16khz and saving them into a memory
 // buffer window(circular register impl) 32x16 bit register(512) to store
-// previous samples -> this gives a lookback time of 
+// previous samples -> this gives a lookback time of
 //
 // Circular buffer is implemented since we do sequential add and mults,
 // meaning we only need to keep track of the offsets and then just scan
@@ -17,11 +17,23 @@ module sample_in
 
   output sample_t x_n,
   output logic x_n_new,
-  output logic [$clog2(TAP_LEN)-1:0] head_idx
+  output logic [$clog2(TAP_LEN)-1:0] head_idx,
+
+  input  logic [$clog2(TAP_LEN)-1:0] tap_sel,
+  output sample_t tap_out
 );
 
   // Q1.11 -> Q1.15
   localparam int NORM_SHIFT = WORD_LEN - INPUT_WIDTH;
+
+  sample_t hist[TAP_LEN];
+
+  sample_t conv;
+  assign conv = sample_t'({~data_in[INPUT_WIDTH-1],
+                           data_in[INPUT_WIDTH-2:0],
+                           {NORM_SHIFT{1'b0}}});
+
+  assign tap_out = hist[tap_sel];
 
   // synchronous reset
   always_ff @(posedge clk) begin
@@ -30,14 +42,12 @@ module sample_in
       x_n_new <= 1'b0;
       head_idx <= '0;
     end else if (data_rdy && data_valid) begin
-      x_n     <= sample_t'({~data_in[INPUT_WIDTH-1],
-                            data_in[INPUT_WIDTH-2:0],
-                            {NORM_SHIFT{1'b0}}});
+      x_n     <= conv;
       x_n_new <= 1'b1;
+      hist[head_idx] <= conv;
       head_idx <= head_idx + 1'b1;
 
     end else begin
-      // one cycle strobe, CYCLES_PER_SAMP apart
       x_n_new <= 1'b0;
     end
   end

@@ -2,7 +2,6 @@ package globals;
 
   parameter int WORD_LEN = 16;
   parameter int TAP_LEN = 32;
-  parameter int TAP_LEN_IDX = 5;
 
   parameter int ACCUM_LEN = 64;
   parameter int CYCLES_PER_SAMP = 4125;
