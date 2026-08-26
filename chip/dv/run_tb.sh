@@ -13,9 +13,10 @@ REPO_ROOT="$(cd -- "$DV_DIR/../.." && pwd)"
 RTL_DIR="$REPO_ROOT/chip/rtl"
 DV_PKG_DIR="$DV_DIR/pkg"
 
-# testbench name -> (tb source, vcd name)
+# testbench name -> (tb source, vcd name, rtl source)
 declare -A TBS=(
-  [sample_in]="sample_in_tb.sv|sample_in_tb.vcd"
+  [sample_in]="sample_in_tb.sv|sample_in_tb.vcd|sample_in.sv"
+  [anti_noise]="anti_noise_tb.sv|anti_noise_tb.vcd|anti_noise_est.sv"
 )
 
 SET="${1:-sample_in}"
@@ -27,9 +28,10 @@ if [ -z "$entry" ]; then
     exit 1
 fi
 
-# ${entry} is "src|vcd"; split on the separator.
+# ${entry} is "src|vcd|rtl"; split on the separator.
 TB_SRC="${entry%%|*}"
-VCD_NAME="${entry##*|}"
+VCD_NAME=$(echo "$entry" | cut -d'|' -f2)
+RTL_SRC=$(echo "$entry" | cut -d'|' -f3)
 
 OUT_DIR="$DV_DIR/out"
 mkdir -p "$OUT_DIR"
@@ -38,7 +40,7 @@ mkdir -p "$OUT_DIR"
 SOURCES=(
   "$RTL_DIR/pkg/globals.sv"
   "$DV_PKG_DIR/dv_globals.sv"
-  "$RTL_DIR/sample_in.sv"
+  "$RTL_DIR/$RTL_SRC"
   "$DV_DIR/$TB_SRC"
 )
 

@@ -11,8 +11,8 @@
 module sample_in
   import globals::*;
 (
-  input wire clk,
-  input wire rst_n,
+  input logic clk,
+  input logic rst_n,
 
   input logic data_rdy,
   input logic data_valid,
@@ -22,8 +22,8 @@ module sample_in
   output logic x_n_new,
   output logic [$clog2(TAP_LEN)-1:0] head_idx,
 
-  input  logic [$clog2(TAP_LEN)-1:0] tap_sel,
-  output sample_t tap_out
+  input  logic [$clog2(TAP_LEN)-1:0] x_tap_sel,
+  output sample_t x_tap_out
 );
 
   // Q1.11 -> Q1.15
@@ -36,7 +36,7 @@ module sample_in
                            data_in[INPUT_WIDTH-2:0],
                            {NORM_SHIFT{1'b0}}});
 
-  assign tap_out = hist[tap_sel];
+  assign x_tap_out = hist[x_tap_sel];
 
   // synchronous reset
   always_ff @(posedge clk) begin
