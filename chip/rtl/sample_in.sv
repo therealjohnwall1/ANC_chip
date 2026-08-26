@@ -5,6 +5,9 @@
 // Circular buffer is implemented since we do sequential add and mults,
 // meaning we only need to keep track of the offsets and then just scan
 // through
+//
+// one writer(peripheral data_in,rdy, and valid)
+// multiple readers(read through tap_sel, tap_out)
 module sample_in
   import globals::*;
 (
