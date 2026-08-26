@@ -14,6 +14,8 @@ module sample_in_tb;
   logic [INPUT_WIDTH-1:0] data_in;
   sample_t x_n;
   logic x_n_new;
+  logic [$clog2(globals::TAP_LEN)-1:0] head_idx;
+  logic [$clog2(globals::TAP_LEN)-1:0] exp_head = '0;
 
   sample_in dut (
     .clk       (clk),
@@ -22,7 +24,8 @@ module sample_in_tb;
     .data_valid(data_valid),
     .data_in   (data_in),
     .x_n       (x_n),
-    .x_n_new   (x_n_new)
+    .x_n_new   (x_n_new),
+    .head_idx  (head_idx)
   );
 
   initial begin
@@ -62,6 +65,7 @@ module sample_in_tb;
     repeat (CYC_TB) @(posedge clk);
 
     $display("T=%0t: reset released", $time);
+    if (head_idx !== '0) $fatal(1, "reset did not clear head_idx");
 
     @(negedge clk);
     data_in <= 12'h123;
@@ -73,12 +77,15 @@ module sample_in_tb;
     assert (x_n_new === 1'b0) else
       $fatal(1, "x_n_new fired with data_rdy low");
     if (x_n !== '0) $display("note: x_n changed on non-valid handshake");
+    if (head_idx !== '0) $fatal(1, "head_idx advanced on non-valid handshake");
 
     repeat (CYC_TB) @(posedge clk);
 
     drive_sample(12'h7FF, 1'b1, 1'b1);
     if (x_n !== expected(12'h7FF)) $fatal(1, "x_n wrong for 0x7FF");
     if (x_n_new !== 1'b1) $fatal(1, "x_n_new not strobed");
+    exp_head++;
+    if (head_idx !== exp_head) $fatal(1, "head_idx != %0d", exp_head);
     $display("T=%0t: 0x7FF -> x_n=%h x_n_new=%0d", $time, x_n, x_n_new);
 
     repeat (CYC_TB) @(posedge clk);
@@ -86,18 +93,24 @@ module sample_in_tb;
 
     drive_sample(12'h800, 1'b1, 1'b1);
     if (x_n !== expected(12'h800)) $fatal(1, "x_n wrong for 0x800");
+    exp_head++;
+    if (head_idx !== exp_head) $fatal(1, "head_idx != %0d", exp_head);
     $display("T=%0t: 0x800 -> x_n=%h", $time, x_n);
 
     repeat (CYC_TB) @(posedge clk);
 
     drive_sample(12'h000, 1'b1, 1'b1);
     if (x_n !== expected(12'h000)) $fatal(1, "x_n wrong for 0x000");
+    exp_head++;
+    if (head_idx !== exp_head) $fatal(1, "head_idx != %0d", exp_head);
     $display("T=%0t: 0x000 -> x_n=%h", $time, x_n);
 
     repeat (CYC_TB) @(posedge clk);
 
     drive_sample(12'hFFF, 1'b1, 1'b1);
     if (x_n !== expected(12'hFFF)) $fatal(1, "x_n wrong for 0xFFF");
+    exp_head++;
+    if (head_idx !== exp_head) $fatal(1, "head_idx != %0d", exp_head);
     $display("T=%0t: 0xFFF -> x_n=%h", $time, x_n);
 
     repeat (CYC_TB) @(posedge clk);
@@ -106,6 +119,7 @@ module sample_in_tb;
     repeat (2) @(posedge clk);
     if (x_n !== '0) $fatal(1, "reset did not clear x_n");
     if (x_n_new !== 1'b0) $fatal(1, "reset did not clear x_n_new");
+    if (head_idx !== '0) $fatal(1, "reset did not clear head_idx");
     $display("T=%0t: reset cleared x_n/x_n_new", $time);
     rst_n <= 1'b1;
 

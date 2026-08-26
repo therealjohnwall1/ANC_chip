@@ -12,6 +12,11 @@ env/
 
 .env
 
+# Verilator build output
+obj_dir/
+*.vcd
+*.fst
+
 
 *.swp
 
