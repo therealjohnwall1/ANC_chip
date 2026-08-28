@@ -68,7 +68,7 @@ module anti_noise_tb;
     exp = expected_y(h_idx);
 
     @(negedge clk);
-    head_idx = h_idx;
+    head_idx = h_idx[$clog2(N)-1:0];
     x_n_new  = 1'b1;
     @(negedge clk);
     x_n_new  = 1'b0;

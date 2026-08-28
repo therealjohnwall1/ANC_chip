@@ -21,12 +21,9 @@ module anti_noise
   output logic y_n_ready
 );
 
-  // tap index for the current MAC: start at the newest sample (head_idx - 1)
-  // and scan back through time. head_idx is mod-TAP_LEN so subtraction wraps.
-  assign x_tap_sel = head_idx - acc_num - 1'b1;
+  assign x_tap_sel = head_idx - acc_num[$clog2(TAP_LEN)-1:0] - 1'b1;
   assign w_tap_sel = acc_num[$clog2(TAP_LEN)-1:0];
 
-  // counts 0 .. TAP_LEN-1 over the MAC scan, then holds on the last tap
   logic [$clog2(TAP_LEN):0] acc_num;
 
   logic active;
@@ -37,24 +34,30 @@ module anti_noise
       acc_num   <= '0;
       y_n       <= '0;
       y_n_ready <= 1'b0;
+    
+    // start TAP_LEN cycle MAC
     end else if (x_n_new) begin
-      // start counter and go till it ends
       active    <= 1'b1;
       acc_num   <= '0;
       y_n       <= '0;
       y_n_ready <= 1'b0;
-    end else if (active) begin
-      // keep counting/summing: MAC the current x/w tap pair into y(n)
-      y_n <= y_n + accum_t'(w_tap_out) * accum_t'(x_tap_out);
 
-      // last tap -> finish counting and set ready flag so y(n) can be pulled out
-      if (acc_num == TAP_LEN - 1) begin
+    // cont MAC
+    end else if (active) begin
+      y_n <= y_n + accum_t'(w_tap_out) * accum_t'(x_tap_out);
+      
+      // MAC full, set y_n_ready flag high to pull data out and move onto next
+      if (acc_num == ($clog2(TAP_LEN) + 1)'(TAP_LEN - 1)) begin
         active    <= 1'b0;
         y_n_ready <= 1'b1;
+
+
+      // MAC not full,
       end else begin
         acc_num   <= acc_num + 1'b1;
         y_n_ready <= 1'b0;
       end
+    
     end else begin
       y_n_ready <= 1'b0;
     end
