@@ -45,7 +45,7 @@ module anti_noise
     // cont MAC
     end else if (active) begin
       y_n <= y_n + accum_t'(w_tap_out) * accum_t'(x_tap_out);
-      
+
       // MAC full, set y_n_ready flag high to pull data out and move onto next
       if (acc_num == ($clog2(TAP_LEN) + 1)'(TAP_LEN - 1)) begin
         active    <= 1'b0;
