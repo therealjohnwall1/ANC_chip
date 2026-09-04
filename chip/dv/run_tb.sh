@@ -13,10 +13,13 @@ REPO_ROOT="$(cd -- "$DV_DIR/../.." && pwd)"
 RTL_DIR="$REPO_ROOT/chip/rtl"
 DV_PKG_DIR="$DV_DIR/pkg"
 
-# testbench name -> (tb source, vcd name, rtl source)
+# testbench name -> (tb source, vcd name, rtl source list, colon-separated)
 declare -A TBS=(
   [sample_in]="sample_in_tb.sv|sample_in_tb.vcd|sample_in.sv"
   [anti_noise]="anti_noise_tb.sv|anti_noise_tb.vcd|anti_noise_est.sv"
+  [regfile]="regfile_tb.sv|regfile_tb.vcd|regfile.sv"
+  [error_block]="error_block_tb.sv|error_block_tb.vcd|error_block.sv"
+  [s_hat_fir]="s_hat_fir_tb.sv|s_hat_fir_tb.vcd|regfile.sv:s_hat_fir.sv"
 )
 
 SET="${1:-sample_in}"
@@ -28,10 +31,11 @@ if [ -z "$entry" ]; then
     exit 1
 fi
 
-# ${entry} is "src|vcd|rtl"; split on the separator.
+# ${entry} is "src|vcd|rtl[:rtl...]"; split on the separator.
 TB_SRC="${entry%%|*}"
-VCD_NAME=$(echo "$entry" | cut -d'|' -f2)
-RTL_SRC=$(echo "$entry" | cut -d'|' -f3)
+rest="${entry#*|}"
+VCD_NAME="${rest%%|*}"
+RTL_LIST="${rest#*|}"
 
 OUT_DIR="$DV_DIR/out"
 mkdir -p "$OUT_DIR"
@@ -40,9 +44,9 @@ mkdir -p "$OUT_DIR"
 SOURCES=(
   "$RTL_DIR/pkg/globals.sv"
   "$DV_PKG_DIR/dv_globals.sv"
-  "$RTL_DIR/$RTL_SRC"
-  "$DV_DIR/$TB_SRC"
 )
+IFS=':'; for r in $RTL_LIST; do SOURCES+=("$RTL_DIR/$r"); done; unset IFS
+SOURCES+=("$DV_DIR/$TB_SRC")
 
 build() {
     ( cd "$DV_DIR" && \
@@ -53,6 +57,7 @@ build() {
         --timescale 1ns/1ps \
         -I"$RTL_DIR/pkg" \
         -I"$DV_PKG_DIR" \
+        -I"$DV_DIR" \
         -o tb_sim \
         --trace \
         --trace-structs \
