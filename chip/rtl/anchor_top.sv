@@ -19,7 +19,7 @@ module anchor_top
   // sample_in staging / observability
   output sample_t x_n,
   output logic x_n_new,
-  output logic [$clog2(TAP_LEN)-1:0] head_idx,
+  output logic [$clog2(HIST_DEPTH)-1:0] head_idx,
   output sample_t x_tap_out,
 
   // anti-noise output
@@ -29,6 +29,10 @@ module anchor_top
   // error_block status
   output logic w_n_updated,
   output logic mu_saturated,
+
+  // w[] observability (debug/test readback of the weights register file)
+  input logic [$clog2(TAP_LEN)-1:0] w_rd_sel,
+  output sample_t w_rd_data,
 
   // s_hat_fir status / sequencing
   output logic x_f_ready,  // pulse: x_f[n] computed -- assert e after this
@@ -44,7 +48,7 @@ module anchor_top
 
   // ---- wires between blocks ----
   // sample_in -> anti_noise
-  logic [$clog2(TAP_LEN)-1:0] x_tap_sel;
+  logic [$clog2(HIST_DEPTH)-1:0] x_tap_sel;
 
   // anti_noise <-> weights RAM
   logic [$clog2(TAP_LEN)-1:0] w_tap_sel;
@@ -129,6 +133,8 @@ module anchor_top
     .rd_data_a (w_tap_out),
     .rd_sel_b  (upd_tap_idx),
     .rd_data_b (w_n_tap),
+    .rd_sel_c  (w_rd_sel),
+    .rd_data_c (w_rd_data),
     .wr_sel    (upd_tap_idx),
     .wr_data   (w_new_tap),
     .wr_en     (w_wr_en)

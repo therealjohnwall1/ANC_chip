@@ -20,6 +20,7 @@ declare -A TBS=(
   [regfile]="regfile_tb.sv|regfile_tb.vcd|regfile.sv"
   [error_block]="error_block_tb.sv|error_block_tb.vcd|error_block.sv"
   [s_hat_fir]="s_hat_fir_tb.sv|s_hat_fir_tb.vcd|regfile.sv:s_hat_fir.sv"
+  [anc]="anchor_top_tb.sv|anchor_top_tb.vcd|regfile.sv:sample_in.sv:anti_noise_est.sv:error_block.sv:s_hat_fir.sv:anchor_top.sv"
 )
 
 SET="${1:-sample_in}"

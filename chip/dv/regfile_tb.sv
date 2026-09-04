@@ -29,6 +29,8 @@ module regfile_tb;
     .rd_data_a (rd_data_a),
     .rd_sel_b  (rd_sel_b),
     .rd_data_b (rd_data_b),
+    .rd_sel_c  ('0),
+    .rd_data_c (),
     .wr_sel    (wr_sel),
     .wr_data   (wr_data),
     .wr_en     (wr_en)
