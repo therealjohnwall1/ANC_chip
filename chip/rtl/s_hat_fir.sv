@@ -55,7 +55,6 @@ module s_hat_fir
   // saturate to the 16-bit signed x_f range.
   localparam int    SAMPLE_FRAC = WORD_LEN - 1;
   localparam int    XF_SHIFT    = 2 * SAMPLE_FRAC - XF_FRAC;  // 16
-  localparam accum_t ROUND_HALF = accum_t'(1) <<< (XF_SHIFT - 1);
   localparam accum_t XF_MAX     = accum_t'(32767);
   localparam accum_t XF_MIN     = -accum_t'(32768);
 
@@ -81,6 +80,8 @@ module s_hat_fir
     .rd_data_a (sh_scan_out),
     .rd_sel_b  (sh_rd_sel),
     .rd_data_b (sh_rd_data),
+    .rd_sel_c  ('0),
+    .rd_data_c (),
     .wr_sel    (sh_wr_sel),
     .wr_data   (sh_wr_data),
     .wr_en     (sh_wr_en)
@@ -95,11 +96,14 @@ module s_hat_fir
   assign win_idx = $unsigned(tap_idx) + 1'b1;
   assign x_fn_tap = xf_line[win_idx];
 
-  // quantize acc -> xf_t
-  accum_t acc_mag, rnd_mag, xf_rounded;
-  assign acc_mag  = (acc >= 0) ? acc : -acc;
-  assign rnd_mag  = (acc_mag + ROUND_HALF) >>> XF_SHIFT;
-  assign xf_rounded = (acc >= 0) ? rnd_mag : -rnd_mag;
+  // quantize acc -> xf_t, round-half-to-even (golden Fxp rounding="around")
+  accum_t xf_floor, xf_rounded;
+  logic   xf_half, xf_frac_nonzero, xf_roundup;
+  assign xf_floor        = acc >>> XF_SHIFT;
+  assign xf_half         = acc[XF_SHIFT-1];
+  assign xf_frac_nonzero = |acc[XF_SHIFT-2:0];
+  assign xf_roundup      = xf_half & (xf_frac_nonzero | xf_floor[0]);
+  assign xf_rounded      = xf_floor + accum_t'(xf_roundup);
 
   xf_t xf_out;
   always_comb begin

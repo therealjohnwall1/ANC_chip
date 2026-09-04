@@ -33,6 +33,9 @@ module error_block
   output logic mu_saturated // sticky per update: mu exceeded step_t
 );
 
+  // the divider toggles every cycle for ~64 cycles a sample; don't trace it
+  /* verilator tracing_off */
+
   localparam int TAP_CNT_W    = $clog2(TAP_LEN);
   localparam int SAMPLE_FRAC  = WORD_LEN - 1;                     // 15, Q1.15
   localparam int ACC_FRAC     = 2 * SAMPLE_FRAC;                  // 30
@@ -78,18 +81,23 @@ module error_block
 
   step_t mu_q;
 
-  accum_t delta_raw, sum_raw, sum_mag, rounded_mag, rounded;
+  accum_t delta_raw, sum_raw, sum_floor, rounded;
+  logic   half_bit, frac_nonzero, round_up;
   sample_t w_rounded;
 
-  localparam accum_t ROUND_HALF = accum_t'(1) <<< (W_SHIFT - 1);
   localparam accum_t SAMPLE_MAX = accum_t'(32767);
   localparam accum_t SAMPLE_MIN = -accum_t'(32768);
 
   assign delta_raw = accum_t'(mu_q) * accum_t'(e_n_q) * accum_t'(x_fn_tap);
   assign sum_raw   = (accum_t'(w_n_tap) <<< W_SHIFT) + delta_raw;
-  assign sum_mag    = (sum_raw >= 0) ? sum_raw : -sum_raw;
-  assign rounded_mag = (sum_mag + ROUND_HALF) >>> W_SHIFT;
-  assign rounded    = (sum_raw >= 0) ? rounded_mag : -rounded_mag;
+
+  // round-half-to-even (bankers), matching golden Fxp rounding="around":
+  // q = floor(sum / 2^W_SHIFT); round up when > half, or == half and q odd.
+  assign sum_floor    = sum_raw >>> W_SHIFT;
+  assign half_bit     = sum_raw[W_SHIFT-1];     // top fractional bit (>= half)
+  assign frac_nonzero = |sum_raw[W_SHIFT-2:0];  // any lower fractional bit
+  assign round_up     = half_bit & (frac_nonzero | sum_floor[0]);
+  assign rounded      = sum_floor + accum_t'(round_up);
 
   always_comb begin
     if (rounded > SAMPLE_MAX)       w_rounded = 16'sd32767;
@@ -185,4 +193,6 @@ module error_block
       endcase
     end
   end
+
+  /* verilator tracing_on */
 endmodule
