@@ -20,16 +20,16 @@ module sample_in
 
   output sample_t x_n,
   output logic x_n_new,
-  output logic [$clog2(TAP_LEN)-1:0] head_idx,
+  output logic [$clog2(HIST_DEPTH)-1:0] head_idx,
 
-  input  logic [$clog2(TAP_LEN)-1:0] x_tap_sel,
+  input  logic [$clog2(HIST_DEPTH)-1:0] x_tap_sel,
   output sample_t x_tap_out
 );
 
   // Q1.11 -> Q1.15
   localparam int NORM_SHIFT = WORD_LEN - INPUT_WIDTH;
 
-  sample_t hist[TAP_LEN];
+  sample_t hist[HIST_DEPTH];
 
   sample_t conv;
   assign conv = sample_t'({~data_in[INPUT_WIDTH-1],

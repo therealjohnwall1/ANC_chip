@@ -14,15 +14,15 @@ module sample_in_tb;
   logic [INPUT_WIDTH-1:0] data_in;
   sample_t x_n;
   logic x_n_new;
-  logic [$clog2(globals::TAP_LEN)-1:0] head_idx;
-  logic [$clog2(globals::TAP_LEN)-1:0] exp_head = '0;
+  logic [$clog2(globals::HIST_DEPTH)-1:0] head_idx;
+  logic [$clog2(globals::HIST_DEPTH)-1:0] exp_head = '0;
 
   localparam int TAP_CNT_W = $clog2(globals::TAP_LEN);
-  logic [TAP_CNT_W-1:0] x_tap_sel;
+  logic [$clog2(globals::HIST_DEPTH)-1:0] x_tap_sel;
   sample_t x_tap_out;
-  sample_t exp_win[globals::TAP_LEN];
+  sample_t exp_win[globals::HIST_DEPTH];
   logic [INPUT_WIDTH-1:0] drv_c;
-  logic [TAP_CNT_W-1:0] scan_addr;
+  logic [$clog2(globals::HIST_DEPTH)-1:0] scan_addr;
 
   sample_in dut (
     .clk       (clk),

@@ -2,6 +2,10 @@ package globals;
 
   parameter int WORD_LEN = 16;
   parameter int TAP_LEN = 32;
+  // raw tap-line depth, rounded up to a power of two for free mod-2^k wrap.
+  // y[n] reads x[n-1 .. n-TAP_LEN], which needs TAP_LEN+1 distinct samples
+  // (golden/fir.py required_depth = max(N_W+1, N_S)).
+  parameter int HIST_DEPTH = 1 << $clog2(TAP_LEN + 1);
 
   parameter int ACCUM_LEN = 64;
   parameter int CYCLES_PER_SAMP = 4125;

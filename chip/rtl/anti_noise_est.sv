@@ -12,16 +12,19 @@ module anti_noise
   // select x_tap_sel, pull from x_tap_out in sample_in block
   // select w_tap_sel, pull from w_tap_out in weights block
 
-  input logic [$clog2(TAP_LEN)-1:0] head_idx,
+  input logic [$clog2(HIST_DEPTH)-1:0] head_idx,
   input sample_t x_tap_out,
   input sample_t w_tap_out,
-  output logic [$clog2(TAP_LEN)-1:0] x_tap_sel,
+  output logic [$clog2(HIST_DEPTH)-1:0] x_tap_sel,
   output logic [$clog2(TAP_LEN)-1:0] w_tap_sel,
   output accum_t y_n,
   output logic y_n_ready
 );
 
-  assign x_tap_sel = head_idx - acc_num[$clog2(TAP_LEN)-1:0] - 1'b1;
+  // y[n] = sum_k w[k] * x[n-1-k]: newest tap (k=0) reaches x[n-1], so the
+  // scan starts one sample *behind* the head (head-1 is x[n], the just-stored
+  // sample). head_idx - acc_num - 2 == x[n-1-acc_num].
+  assign x_tap_sel = head_idx - {1'b0, acc_num[$clog2(TAP_LEN)-1:0]} - 6'd2;
   assign w_tap_sel = acc_num[$clog2(TAP_LEN)-1:0];
 
   logic [$clog2(TAP_LEN):0] acc_num;
