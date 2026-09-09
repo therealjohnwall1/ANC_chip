@@ -82,70 +82,176 @@
 module mmio_regs
   import globals::*;
 (
-  input  logic clk,
-  input  logic rst_n,
+    input logic clk,
+    input logic rst_n,
 
-  // ---- transaction interface (driven by serial_bridge) ----
-  input  logic        wr,      // 1-cycle write strobe
-  input  logic        rd,      // 1-cycle read strobe (optional)
-  input  logic [6:0]  addr,    // register address (stable while wr/rd high)
-  input  logic [15:0] wdata,   // write data
-  output logic [15:0] rdata,   // read data (COMBINATIONAL from addr)
+    // ---- transaction interface (driven by serial_bridge) ----
+    input  logic        wr,     // 1-cycle write strobe
+    input  logic        rd,     // 1-cycle read strobe (optional)
+    input  logic [ 6:0] addr,   // register address (stable while wr/rd high)
+    input  logic [15:0] wdata,  // write data
+    output logic [15:0] rdata,  // read data (COMBINATIONAL from addr)
 
-  // ---- anchor_top: ADC sample inputs (x and e) ----
-  output logic adc_valid,
-  output logic [INPUT_WIDTH-1:0] adc_data,
-  output logic err_valid,
-  output logic [INPUT_WIDTH-1:0] err_data,
+    // ---- anchor_top: ADC sample inputs (x and e) ----
+    output logic adc_valid,
+    output logic [INPUT_WIDTH-1:0] adc_data,
+    output logic err_valid,
+    output logic [INPUT_WIDTH-1:0] err_data,
 
-  // ---- anchor_top: s_hat load / readback ----
-  output logic [$clog2(TAP_LEN)-1:0] sh_wr_sel,
-  output sample_t sh_wr_data,
-  output logic sh_wr_en,
-  output logic [$clog2(TAP_LEN)-1:0] sh_rd_sel,
-  input  sample_t sh_rd_data,
+    // ---- anchor_top: s_hat load / readback ----
+    output logic [$clog2(TAP_LEN)-1:0] sh_wr_sel,
+    output sample_t sh_wr_data,
+    output logic sh_wr_en,
+    output logic [$clog2(TAP_LEN)-1:0] sh_rd_sel,
+    input sample_t sh_rd_data,
 
-  // ---- anchor_top: weight readback ----
-  output logic [$clog2(TAP_LEN)-1:0] w_rd_sel,
-  input  sample_t w_rd_data,
+    // ---- anchor_top: weight readback ----
+    output logic [$clog2(TAP_LEN)-1:0] w_rd_sel,
+    input sample_t w_rd_data,
 
-  // ---- anchor_top: status / outputs ----
-  input  accum_t y_n,
-  input  logic   y_n_ready,
-  input  logic   w_n_updated,
-  input  logic   x_f_ready,
-  input  logic   x_f_valid,
-  input  logic   mu_saturated,
+    // ---- anchor_top: status / outputs ----
+    input accum_t y_n,
+    input logic   y_n_ready,
+    input logic   w_n_updated,
+    input logic   x_f_ready,
+    input logic   x_f_valid,
+    input logic   mu_saturated,
 
-  output logic   irq
+    output logic irq
 );
 
+// ==========================================================================
+  // Register address decode constants
   // ==========================================================================
-  // TODO: YOUR IMPLEMENTATION HERE.
-  //
-  // Suggested register/flag declarations:
-  //   logic [4:0] sh_idx;   // s_hat index (auto-inc)
-  //   logic [4:0] w_idx;    // weight index (auto-inc)
-  //   logic       y_rdy_l, w_upd_l, xf_rdy_l;  // sticky done bits
-  //   ...
-  //
-  // Suggested structure:
-  //   always_ff @(posedge clk) for adc_valid/err_valid pulse gen,
-  //       sh_wr_en pulse, sticky latch, auto-increment, and CLEAR_FLAGS.
-  //   always_comb (case on addr) for rdata.
-  // ==========================================================================
+  localparam logic [6:0] ADDR_CMD     = 7'h00;
+  localparam logic [6:0] ADDR_STATUS  = 7'h01;
+  localparam logic [6:0] ADDR_X       = 7'h02;
+  localparam logic [6:0] ADDR_E       = 7'h03;
+  localparam logic [6:0] ADDR_Y_0     = 7'h04;
+  localparam logic [6:0] ADDR_Y_1     = 7'h05;
+  localparam logic [6:0] ADDR_Y_2     = 7'h06;
+  localparam logic [6:0] ADDR_Y_3     = 7'h07;
+  localparam logic [6:0] ADDR_SH_IDX  = 7'h10;
+  localparam logic [6:0] ADDR_SH_DATA = 7'h11;
+  localparam logic [6:0] ADDR_W_IDX   = 7'h20;
+  localparam logic [6:0] ADDR_W_DATA  = 7'h21;
 
-  // placeholder so the module simulates without Xs -- delete and implement.
-  assign rdata     = '0;
-  assign adc_valid = 1'b0;
-  assign adc_data  = '0;
-  assign err_valid = 1'b0;
-  assign err_data  = '0;
-  assign sh_wr_sel = '0;
-  assign sh_wr_data= '0;
-  assign sh_wr_en  = 1'b0;
-  assign sh_rd_sel = '0;
-  assign w_rd_sel  = '0;
-  assign irq       = 1'b0;
+  localparam int SH_IDX_W = $clog2(TAP_LEN);
+  localparam int W_IDX_W  = $clog2(TAP_LEN);
+
+  // ---- internal state ----
+  logic [SH_IDX_W-1:0] sh_idx;
+  logic [W_IDX_W-1:0]  w_idx;
+
+  logic [INPUT_WIDTH-1:0] adc_data_l;
+  logic [INPUT_WIDTH-1:0] err_data_l;
+
+  logic y_rdy_l, w_upd_l, xf_rdy_l;  // sticky done bits
+
+  // ==========================================================================
+  // Registered control / pulse generation
+  // ==========================================================================
+  always_ff @(posedge clk) begin
+    if (!rst_n) begin
+      adc_valid  <= 1'b0;
+      err_valid  <= 1'b0;
+      adc_data_l <= '0;
+      err_data_l <= '0;
+      sh_idx     <= '0;
+      w_idx      <= '0;
+      y_rdy_l    <= 1'b0;
+      w_upd_l    <= 1'b0;
+      xf_rdy_l   <= 1'b0;
+    end else begin
+      // default: strobes are one-cycle
+      adc_valid <= 1'b0;
+      err_valid <= 1'b0;
+
+      // X write -> latch sample + pulse adc_valid
+      if (wr && addr == ADDR_X) begin
+        adc_data_l <= wdata[INPUT_WIDTH-1:0];
+        adc_valid  <= 1'b1;
+      end
+
+      // E write -> latch sample + pulse err_valid
+      if (wr && addr == ADDR_E) begin
+        err_data_l <= wdata[INPUT_WIDTH-1:0];
+        err_valid  <= 1'b1;
+      end
+
+      // s_hat index write
+      if (wr && addr == ADDR_SH_IDX) begin
+        sh_idx <= wdata[SH_IDX_W-1:0];
+      end
+
+      // s_hat data write -> auto-increment (the actual regfile write strobe
+      // sh_wr_en is generated combinationally below, so the coefficient lands
+      // at the current sh_idx, and the index increments afterward).
+      if (wr && addr == ADDR_SH_DATA) begin
+        sh_idx <= sh_idx + 1'b1;
+      end
+
+      // weight index write
+      if (wr && addr == ADDR_W_IDX) begin
+        w_idx <= wdata[W_IDX_W-1:0];
+      end
+      // NOTE: no auto-increment on W_DATA *read* here. rdata is combinational
+      // and the bridge latches it several cycles after the rd strobe, so an
+      // increment keyed on rd would corrupt the in-flight read. W_IDX is set
+      // explicitly by the MCU before each read (the testbench does exactly
+      // that).
+
+      // CLEAR_FLAGS (CMD bit 4): resets the sticky done bits. Applied as a
+      // priority clear so it wins even if a done pulse coincides with the
+      // clearing write in the same cycle.
+      if (wr && addr == ADDR_CMD && wdata[4]) begin
+        y_rdy_l  <= 1'b0;
+        w_upd_l  <= 1'b0;
+        xf_rdy_l <= 1'b0;
+      end else begin
+        y_rdy_l  <= y_rdy_l  | y_n_ready;
+        w_upd_l  <= w_upd_l  | w_n_updated;
+        xf_rdy_l <= xf_rdy_l | x_f_ready;
+      end
+    end
+  end
+
+  // ==========================================================================
+  // Combinational read path (rdata must be a pure function of addr)
+  // ==========================================================================
+  always_comb begin
+    case (addr)
+      ADDR_STATUS: begin
+        rdata = '0;
+        rdata[0] = y_rdy_l;
+        rdata[1] = w_upd_l;
+        rdata[2] = x_f_valid;
+        rdata[3] = xf_rdy_l;
+        rdata[4] = mu_saturated;
+        rdata[5] = 1'b0; // fault (not driven by anchor_top yet)
+      end
+      ADDR_Y_0: rdata = y_n[15:0];
+      ADDR_Y_1: rdata = y_n[31:16];
+      ADDR_Y_2: rdata = y_n[47:32];
+      ADDR_Y_3: rdata = y_n[63:48];
+      ADDR_SH_DATA: rdata = sample_t'(sh_rd_data);
+      ADDR_W_DATA:  rdata = sample_t'(w_rd_data);
+      default: rdata = '0;
+    endcase
+  end
+
+  // ==========================================================================
+  // Combinational datapath forwarding
+  // ==========================================================================
+  assign adc_data   = adc_data_l;
+  assign err_data   = err_data_l;
+  assign sh_wr_sel  = sh_idx;
+  assign sh_wr_data = wdata;
+  // write strobe: combinational from the SH_DATA write so the s_hat regfile
+  // samples sh_wr_sel/sh_wr_data at the pre-increment sh_idx (one-cycle wr).
+  assign sh_wr_en   = wr && (addr == ADDR_SH_DATA);
+  assign sh_rd_sel  = sh_idx;
+  assign w_rd_sel   = w_idx;
+  assign irq        = y_rdy_l | w_upd_l | xf_rdy_l;
 
 endmodule

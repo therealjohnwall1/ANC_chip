@@ -29,47 +29,52 @@
 //   * cs_n rises  -> commit: write frames pulse wr with held addr/wdata
 
 module serial_bridge (
-  input  logic clk,
-  input  logic rst_n,
+    input logic clk,
+    input logic rst_n,
 
-  input  logic sclk,   // SPI clock (async; must be <= clk/4)
-  input  logic cs_n,   // active-low chip select
-  input  logic sdi,    // master-out / slave-in  (MOSI)
-  output logic sdo,    // master-in  / slave-out (MISO)
+    input  logic sclk,  // SPI clock (async; must be <= clk/4)
+    input  logic cs_n,  // active-low chip select
+    input  logic sdi,   // master-out / slave-in  (MOSI)
+    output logic sdo,   // master-in  / slave-out (MISO)
 
-  // transaction interface -> mmio_regs
-  output logic        wr,
-  output logic        rd,
-  output logic [6:0]  addr,
-  output logic [15:0] wdata,
-  input  logic [15:0] rdata
+    // transaction interface -> mmio_regs
+    output logic        wr,
+    output logic        rd,
+    output logic [ 6:0] addr,
+    output logic [15:0] wdata,
+    input  logic [15:0] rdata
 );
 
   // ---- input synchronization + edge detection ----
   logic sclk_meta, sclk_sync, sclk_prev;
-  logic csn_meta,  csn_sync,  csn_prev;
-  logic sdi_meta,  sdi_sync;
+  logic csn_meta, csn_sync, csn_prev;
+  logic sdi_meta, sdi_sync;
 
   always_ff @(posedge clk) begin
-    sclk_meta <= sclk;  sclk_sync <= sclk_meta;  sclk_prev <= sclk_sync;
-    csn_meta  <= cs_n;  csn_sync  <= csn_meta;   csn_prev  <= csn_sync;
-    sdi_meta  <= sdi;   sdi_sync  <= sdi_meta;
+    sclk_meta <= sclk;
+    sclk_sync <= sclk_meta;
+    sclk_prev <= sclk_sync;
+    csn_meta  <= cs_n;
+    csn_sync  <= csn_meta;
+    csn_prev  <= csn_sync;
+    sdi_meta  <= sdi;
+    sdi_sync  <= sdi_meta;
   end
 
-  wire sclk_rise =  sclk_sync & ~sclk_prev;
-  wire sclk_fall = ~sclk_sync &  sclk_prev;
-  wire csn_rise  =  csn_sync  & ~csn_prev;
-  wire csn_fall  = ~csn_sync  &  csn_prev;
+  wire         sclk_rise = sclk_sync & ~sclk_prev;
+  wire         sclk_fall = ~sclk_sync & sclk_prev;
+  wire         csn_rise = csn_sync & ~csn_prev;
+  wire         csn_fall = ~csn_sync & csn_prev;
 
   // incoming shift register; next value = shift in the current sdi bit
-  wire [23:0] sh_in_next = {sh_in[22:0], sdi_sync};
+  wire  [23:0] sh_in_next = {sh_in[22:0], sdi_sync};
 
   // ---- frame state ----
-  logic [4:0]  bit_cnt;    // bits received this frame (0..24)
-  logic [23:0] sh_in;      // incoming bits (bit 0 = oldest = LSB position)
-  logic [15:0] sh_out;     // outgoing read data (shifted MSB first)
-  logic        rw_bit;     // decoded rw from header (1=write, 0=read)
-  logic        in_frame;   // cs_n low => inside a frame
+  logic [ 4:0] bit_cnt;  // bits received this frame (0..24)
+  logic [23:0] sh_in;  // incoming bits (bit 0 = oldest = LSB position)
+  logic [15:0] sh_out;  // outgoing read data (shifted MSB first)
+  logic        rw_bit;  // decoded rw from header (1=write, 0=read)
+  logic        in_frame;  // cs_n low => inside a frame
 
   always_ff @(posedge clk) begin
     if (!rst_n) begin
@@ -104,17 +109,14 @@ module serial_bridge (
         if (bit_cnt == 7) begin
           rw_bit <= sh_in_next[7];
           addr   <= sh_in_next[6:0];
-          if (!sh_in_next[7])
-            rd <= 1'b1;   // read frame: pulse rd (clear-on-read etc.)
+          if (!sh_in_next[7]) rd <= 1'b1;  // read frame: pulse rd (clear-on-read etc.)
         end
       end
 
       // read response: load rdata after the header, then shift it out
       if (in_frame && sclk_fall && !rw_bit) begin
-        if (bit_cnt == 8)
-          sh_out <= rdata;
-        else if (bit_cnt > 8 && bit_cnt < 24)
-          sh_out <= {sh_out[14:0], 1'b0};
+        if (bit_cnt == 8) sh_out <= rdata;
+        else if (bit_cnt > 8 && bit_cnt < 24) sh_out <= {sh_out[14:0], 1'b0};
       end
 
       // end of frame: commit writes
@@ -128,7 +130,9 @@ module serial_bridge (
     end
   end
 
-  // sdo: read data MSB-first during the read data phase, 0 otherwise
-  assign sdo = (in_frame && !rw_bit && bit_cnt >= 8 && bit_cnt < 24) ? sh_out[15] : 1'b0;
+  // sdo: read data MSB-first during the read data phase, 0 otherwise.
+  // bit_cnt reaches 24 after the 24th (final) sclk rise, and the LSB of the
+  // read value is driven during that window, so the upper bound must include 24.
+  assign sdo = (in_frame && !rw_bit && bit_cnt >= 8 && bit_cnt <= 24) ? sh_out[15] : 1'b0;
 
 endmodule

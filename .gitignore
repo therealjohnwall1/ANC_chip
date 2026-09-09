@@ -18,5 +18,10 @@ obj_dir/
 *.fst
 
 
+# OpenROAD-flow-scripts outputs
+chip/syn/work/
+
+
 *.swp
 
+chip/syn/.gcd_test/
