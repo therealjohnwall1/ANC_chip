@@ -9,51 +9,51 @@
 module serial_bridge_tb;
 
   localparam time CLK_PERIOD = 20ns;
-  localparam int  SCLK_HALF  = 8;   // clk cycles per sclk half-period
+  localparam int SCLK_HALF = 8;  // clk cycles per sclk half-period
 
   logic clk;
   logic rst_n;
 
   logic sclk, cs_n, sdi, sdo;
   logic wr, rd;
-  logic [6:0]  addr;
+  logic [6:0] addr;
   logic [15:0] wdata, rdata;
 
   // fake MMIO read: echo the address in the high 7 bits
   assign rdata = {addr, 9'b0};
 
   serial_bridge dut (
-    .clk   (clk),
-    .rst_n (rst_n),
-    .sclk  (sclk),
-    .cs_n  (cs_n),
-    .sdi   (sdi),
-    .sdo   (sdo),
-    .wr    (wr),
-    .rd    (rd),
-    .addr  (addr),
-    .wdata (wdata),
-    .rdata (rdata)
+      .clk  (clk),
+      .rst_n(rst_n),
+      .sclk (sclk),
+      .cs_n (cs_n),
+      .sdi  (sdi),
+      .sdo  (sdo),
+      .wr   (wr),
+      .rd   (rd),
+      .addr (addr),
+      .wdata(wdata),
+      .rdata(rdata)
   );
 
   initial begin
     clk = 1'b0;
-    forever #(CLK_PERIOD/2) clk = ~clk;
+    forever #(CLK_PERIOD / 2) clk = ~clk;
   end
 
   // ---- SPI BFM ----
   task automatic spi_bit(input logic tx, output logic rx);
-    sdi  = tx;
-    repeat (SCLK_HALF) @(posedge clk);   // setup while sclk low
+    sdi = tx;
+    repeat (SCLK_HALF) @(posedge clk);  // setup while sclk low
     sclk = 1'b1;
-    repeat (SCLK_HALF) @(posedge clk);   // hold high
-    rx   = sdo;                          // master samples on rising edge
+    repeat (SCLK_HALF) @(posedge clk);  // hold high
+    rx   = sdo;  // master samples on rising edge
     sclk = 1'b0;
-    repeat (SCLK_HALF) @(posedge clk);   // hold low
+    repeat (SCLK_HALF) @(posedge clk);  // hold low
   endtask
 
-  task automatic spi_xfer(input logic rw, input logic [6:0] a,
-                          input logic [15:0] d, output logic [15:0] r);
+  task automatic spi_xfer(input logic rw, input logic [6:0] a, input logic [15:0] d,
+                          output logic [15:0] r);
     logic rx;
     cs_n = 1'b0;
     spi_bit(rw, rx);
@@ -63,7 +63,7 @@ module serial_bridge_tb;
       if (!rw) r[i] = rx;
     end
     cs_n = 1'b1;
-    repeat (4) @(posedge clk);   // let the commit/wr pulse settle
+    repeat (4) @(posedge clk);  // let the commit/wr pulse settle
   endtask
 
   // ---- write monitor: waits for the next wr pulse and checks values ----
@@ -71,7 +71,7 @@ module serial_bridge_tb;
     fork
       begin
         @(posedge clk iff wr);
-        if (addr  !== a) $fatal(1, "write addr %0d, expected %0d", addr, a);
+        if (addr !== a) $fatal(1, "write addr %0d, expected %0d", addr, a);
         if (wdata !== d) $fatal(1, "write data %h, expected %h", wdata, d);
         $display("  write ok: addr=%0d data=%04h", a, d);
       end
@@ -128,10 +128,8 @@ module serial_bridge_tb;
     end
     $display("  read  ok: addr=10 -> %04h", rd_val);
 
-    if (errors == 0)
-      $display("T=%0t: serial_bridge_tb PASS", $time);
-    else
-      $display("T=%0t: serial_bridge_tb FAIL (%0d errors)", $time, errors);
+    if (errors == 0) $display("T=%0t: serial_bridge_tb PASS", $time);
+    else $display("T=%0t: serial_bridge_tb FAIL (%0d errors)", $time, errors);
     $finish;
   end
 

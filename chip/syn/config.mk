@@ -14,7 +14,7 @@ export VERILOG_FILES = \
   /work/chip/rtl/pkg/globals.sv \
   /work/chip/rtl/sample_in.sv \
   /work/chip/rtl/regfile.sv \
-  /work/chip/rtl/anti_noise_est.sv \
+  /work/chip/rtl/anti_noise.sv \
   /work/chip/rtl/s_hat_fir.sv \
   /work/chip/rtl/error_block.sv \
   /work/chip/rtl/anchor_top.sv

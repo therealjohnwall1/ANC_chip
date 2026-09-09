@@ -120,7 +120,7 @@ module mmio_regs
     output logic irq
 );
 
-// ==========================================================================
+  // ==========================================================================
   // Register address decode constants
   // ==========================================================================
   localparam logic [6:0] ADDR_CMD     = 7'h00;
@@ -136,12 +136,12 @@ module mmio_regs
   localparam logic [6:0] ADDR_W_IDX   = 7'h20;
   localparam logic [6:0] ADDR_W_DATA  = 7'h21;
 
-  localparam int SH_IDX_W = $clog2(TAP_LEN);
-  localparam int W_IDX_W  = $clog2(TAP_LEN);
+  localparam int         SH_IDX_W     = $clog2(TAP_LEN);
+  localparam int         W_IDX_W      = $clog2(TAP_LEN);
 
   // ---- internal state ----
   logic [SH_IDX_W-1:0] sh_idx;
-  logic [W_IDX_W-1:0]  w_idx;
+  logic [W_IDX_W-1:0] w_idx;
 
   logic [INPUT_WIDTH-1:0] adc_data_l;
   logic [INPUT_WIDTH-1:0] err_data_l;
@@ -209,8 +209,8 @@ module mmio_regs
         w_upd_l  <= 1'b0;
         xf_rdy_l <= 1'b0;
       end else begin
-        y_rdy_l  <= y_rdy_l  | y_n_ready;
-        w_upd_l  <= w_upd_l  | w_n_updated;
+        y_rdy_l  <= y_rdy_l | y_n_ready;
+        w_upd_l  <= w_upd_l | w_n_updated;
         xf_rdy_l <= xf_rdy_l | x_f_ready;
       end
     end
@@ -228,14 +228,14 @@ module mmio_regs
         rdata[2] = x_f_valid;
         rdata[3] = xf_rdy_l;
         rdata[4] = mu_saturated;
-        rdata[5] = 1'b0; // fault (not driven by anchor_top yet)
+        rdata[5] = 1'b0;  // fault (not driven by anchor_top yet)
       end
       ADDR_Y_0: rdata = y_n[15:0];
       ADDR_Y_1: rdata = y_n[31:16];
       ADDR_Y_2: rdata = y_n[47:32];
       ADDR_Y_3: rdata = y_n[63:48];
       ADDR_SH_DATA: rdata = sample_t'(sh_rd_data);
-      ADDR_W_DATA:  rdata = sample_t'(w_rd_data);
+      ADDR_W_DATA: rdata = sample_t'(w_rd_data);
       default: rdata = '0;
     endcase
   end

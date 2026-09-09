@@ -3,8 +3,8 @@ module anti_noise_tb;
   import globals::*;
   import dv_globals::*;
 
-  localparam int N  = TAP_LEN;               // number of W taps
-  localparam int HW = $clog2(HIST_DEPTH);    // history index width (6)
+  localparam int  N          = TAP_LEN;             // number of W taps
+  localparam int  HW         = $clog2(HIST_DEPTH);  // history index width (6)
   localparam time CLK_PERIOD = 20ns;
 
   logic clk;
@@ -27,21 +27,21 @@ module anti_noise_tb;
   assign w_tap_out = w_taps[w_tap_sel];
 
   anti_noise dut (
-    .clk       (clk),
-    .rst_n     (rst_n),
-    .x_n_new   (x_n_new),
-    .head_idx  (head_idx),
-    .x_tap_out (x_tap_out),
-    .w_tap_out (w_tap_out),
-    .x_tap_sel (x_tap_sel),
-    .w_tap_sel (w_tap_sel),
-    .y_n       (y_n),
-    .y_n_ready (y_n_ready)
+      .clk      (clk),
+      .rst_n    (rst_n),
+      .x_n_new  (x_n_new),
+      .head_idx (head_idx),
+      .x_tap_out(x_tap_out),
+      .w_tap_out(w_tap_out),
+      .x_tap_sel(x_tap_sel),
+      .w_tap_sel(w_tap_sel),
+      .y_n      (y_n),
+      .y_n_ready(y_n_ready)
   );
 
   initial begin
     clk = 1'b0;
-    forever #(CLK_PERIOD/2) clk = ~clk;
+    forever #(CLK_PERIOD / 2) clk = ~clk;
   end
 
   initial begin
@@ -71,7 +71,7 @@ module anti_noise_tb;
     head_idx = h_idx[$clog2(HIST_DEPTH)-1:0];
     x_n_new  = 1'b1;
     @(negedge clk);
-    x_n_new  = 1'b0;
+    x_n_new = 1'b0;
 
     for (int c = 0; c < N + 2; c++) begin
       @(posedge clk);
@@ -97,25 +97,22 @@ module anti_noise_tb;
     if (y_n_ready !== 1'b0) $fatal(1, "y_n_ready high while idle");
 
     // fill histories with deterministic signed values, including extremes
-    for (int i = 0; i < HIST_DEPTH; i++)
-      x_hist[i] = sample_t'($signed((i * 37) - 700));
-    for (int i = 0; i < N; i++)
-      w_taps[i] = sample_t'($signed((i * 53) + 11));
+    for (int i = 0; i < HIST_DEPTH; i++) x_hist[i] = sample_t'($signed((i * 37) - 700));
+    for (int i = 0; i < N; i++) w_taps[i] = sample_t'($signed((i * 53) + 11));
     x_hist[20] = 16'sh7FFF;
-    x_hist[30] = 16'sh8000; // most negative Q1.15
+    x_hist[30] = 16'sh8000;  // most negative Q1.15
     w_taps[7]  = 16'sh8000;
 
-    run_one(0,  1);   // wrap-around: head-1 = index 63 = newest
-    run_one(40, 2);   // no wrap; reaches x[38..7]
-    run_one(31, 3);   // arbitrary head, exercises differencing + wrap
+    run_one(0, 1);  // wrap-around: head-1 = index 63 = newest
+    run_one(40, 2);  // no wrap; reaches x[38..7]
+    run_one(31, 3);  // arbitrary head, exercises differencing + wrap
 
     // zero-weight case must give y(n)=0 regardless of x
     for (int i = 0; i < N; i++) w_taps[i] = '0;
     run_one(5, 4);
 
     // all-zero x case must give y(n)=0 regardless of w
-    for (int i = 0; i < N; i++)
-      w_taps[i] = sample_t'($signed((i * 11) + 3));
+    for (int i = 0; i < N; i++) w_taps[i] = sample_t'($signed((i * 11) + 3));
     for (int i = 0; i < HIST_DEPTH; i++) x_hist[i] = '0;
     run_one(9, 5);
 

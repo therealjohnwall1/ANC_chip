@@ -14,7 +14,7 @@ module error_block_tb;
   `include "error_block_vectors.svh"
 
   localparam time CLK_PERIOD = 20ns;
-  localparam int TAP_CNT_W = $clog2(TAP_LEN);
+  localparam int  TAP_CNT_W  = $clog2(TAP_LEN);
 
   logic clk;
   logic rst_n;
@@ -30,23 +30,23 @@ module error_block_tb;
   logic mu_saturated;
 
   error_block dut (
-    .clk          (clk),
-    .rst_n        (rst_n),
-    .e_n_valid    (e_n_valid),
-    .e_n          (e_n),
-    .tap_idx      (tap_idx),
-    .w_n_tap      (w_n_tap),
-    .x_fn_tap     (x_fn_tap),
-    .w_new_tap    (w_new_tap),
-    .w_wr_en      (w_wr_en),
-    .w_n_updated  (w_n_updated),
-    .mu_saturated (mu_saturated)
+      .clk         (clk),
+      .rst_n       (rst_n),
+      .e_n_valid   (e_n_valid),
+      .e_n         (e_n),
+      .tap_idx     (tap_idx),
+      .w_n_tap     (w_n_tap),
+      .x_fn_tap    (x_fn_tap),
+      .w_new_tap   (w_new_tap),
+      .w_wr_en     (w_wr_en),
+      .w_n_updated (w_n_updated),
+      .mu_saturated(mu_saturated)
   );
 
   // ---- TB-side memory models ----
-  sample_t w_model[TAP_LEN];    // loaded once per case, read via .w_n_tap
-  sample_t xf_model[TAP_LEN];   // read via .x_fn_tap
-  sample_t got_wnew[TAP_LEN];   // captured write-backs, checked vs golden
+  sample_t w_model [TAP_LEN];  // loaded once per case, read via .w_n_tap
+  sample_t xf_model[TAP_LEN];  // read via .x_fn_tap
+  sample_t got_wnew[TAP_LEN];  // captured write-backs, checked vs golden
 
   always_comb begin
     w_n_tap  = w_model[tap_idx];
@@ -54,13 +54,12 @@ module error_block_tb;
   end
 
   always_ff @(posedge clk) begin
-    if (w_wr_en)
-      got_wnew[tap_idx] <= w_new_tap;
+    if (w_wr_en) got_wnew[tap_idx] <= w_new_tap;
   end
 
   initial begin
     clk = 1'b0;
-    forever #(CLK_PERIOD/2) clk = ~clk;
+    forever #(CLK_PERIOD / 2) clk = ~clk;
   end
 
   initial begin
@@ -70,20 +69,17 @@ module error_block_tb;
 
   task automatic reset_dut();
     rst_n = 1'b0;
-    e_n_valid = 1'b0; e_n = '0;
+    e_n_valid = 1'b0;
+    e_n = '0;
     repeat (4) @(posedge clk);
     rst_n = 1'b1;
     repeat (2) @(posedge clk);
   endtask
 
   // run one case end to end
-  task automatic run_case(
-      input sample_t xf_vec[TAP_LEN],
-      input sample_t w_vec[TAP_LEN],
-      input sample_t e_val,
-      input int      mu_sat_val,
-      input sample_t wnew_vec[TAP_LEN],
-      input string   lbl);
+  task automatic run_case(input sample_t xf_vec[TAP_LEN], input sample_t w_vec[TAP_LEN],
+                          input sample_t e_val, input int mu_sat_val,
+                          input sample_t wnew_vec[TAP_LEN], input string lbl);
     int i;
     for (i = 0; i < TAP_LEN; i++) begin
       xf_model[i] = xf_vec[i];
@@ -142,7 +138,7 @@ module error_block_tb;
       // spurious pulse 10 cycles into the pass
       repeat (10) @(posedge clk);
       @(negedge clk);
-      e_n       = 16'sh7FFF;      // different e, must be ignored
+      e_n       = 16'sh7FFF;  // different e, must be ignored
       e_n_valid = 1'b1;
       @(posedge clk);
       @(negedge clk);
@@ -160,9 +156,8 @@ module error_block_tb;
         if (w_n_updated) $fatal(1, "robustness: spurious e_n_valid started a second pass");
       end
       for (i = 0; i < TAP_LEN; i++)
-        if (got_wnew[i] !== EB_WNEW_B[i])
-          $fatal(1, "robustness: w[%0d] corrupted = %h, expected %h",
-                 i, got_wnew[i], EB_WNEW_B[i]);
+      if (got_wnew[i] !== EB_WNEW_B[i])
+        $fatal(1, "robustness: w[%0d] corrupted = %h, expected %h", i, got_wnew[i], EB_WNEW_B[i]);
       $display("robustness pass: spurious e_n_valid mid-pass ignored");
     end
 

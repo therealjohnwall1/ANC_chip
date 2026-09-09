@@ -25,21 +25,21 @@ module sample_in_tb;
   logic [$clog2(globals::HIST_DEPTH)-1:0] scan_addr;
 
   sample_in dut (
-    .clk       (clk),
-    .rst_n     (rst_n),
-    .data_rdy  (data_rdy),
-    .data_valid(data_valid),
-    .data_in   (data_in),
-    .x_n       (x_n),
-    .x_n_new   (x_n_new),
-    .head_idx   (head_idx),
-    .x_tap_sel  (x_tap_sel),
-    .x_tap_out  (x_tap_out)
+      .clk       (clk),
+      .rst_n     (rst_n),
+      .data_rdy  (data_rdy),
+      .data_valid(data_valid),
+      .data_in   (data_in),
+      .x_n       (x_n),
+      .x_n_new   (x_n_new),
+      .head_idx  (head_idx),
+      .x_tap_sel (x_tap_sel),
+      .x_tap_out (x_tap_out)
   );
 
   initial begin
     clk = 1'b0;
-    forever #(CLK_PERIOD/2) clk = ~clk;
+    forever #(CLK_PERIOD / 2) clk = ~clk;
   end
 
   initial begin
@@ -47,9 +47,7 @@ module sample_in_tb;
     $dumpvars(0, sample_in_tb);
   end
 
-  task automatic drive_sample(input logic [INPUT_WIDTH-1:0] d,
-                              input logic rdy,
-                              input logic val);
+  task automatic drive_sample(input logic [INPUT_WIDTH-1:0] d, input logic rdy, input logic val);
     @(negedge clk);
     data_in    = d;
     data_rdy   = rdy;
@@ -61,7 +59,7 @@ module sample_in_tb;
   endtask
 
   function automatic sample_t expected(input logic [INPUT_WIDTH-1:0] d);
-    return sample_t'({~d[INPUT_WIDTH-1], d[INPUT_WIDTH-2:0], {(WORD_LEN-INPUT_WIDTH){1'b0}}});
+    return sample_t'({~d[INPUT_WIDTH-1], d[INPUT_WIDTH-2:0], {(WORD_LEN - INPUT_WIDTH) {1'b0}}});
   endfunction
 
   initial begin
@@ -81,11 +79,12 @@ module sample_in_tb;
     data_in <= 12'h123;
     data_rdy <= 1'b0;
     data_valid <= 1'b1;
-    @(posedge clk); @(negedge clk);
-    data_rdy <= 1'b0;
+    @(posedge clk);
+    @(negedge clk);
+    data_rdy   <= 1'b0;
     data_valid <= 1'b0;
-    assert (x_n_new === 1'b0) else
-      $fatal(1, "x_n_new fired with data_rdy low");
+    assert (x_n_new === 1'b0)
+    else $fatal(1, "x_n_new fired with data_rdy low");
     if (x_n !== '0) $display("note: x_n changed on non-valid handshake");
     if (head_idx !== '0) $fatal(1, "head_idx advanced on non-valid handshake");
 

@@ -4,21 +4,21 @@
 module anti_noise
   import globals::*;
 (
-  input logic clk,
-  input logic rst_n,
+    input logic clk,
+    input logic rst_n,
 
-  input logic x_n_new,
+    input logic x_n_new,
 
-  // select x_tap_sel, pull from x_tap_out in sample_in block
-  // select w_tap_sel, pull from w_tap_out in weights block
+    // select x_tap_sel, pull from x_tap_out in sample_in block
+    // select w_tap_sel, pull from w_tap_out in weights block
 
-  input logic [$clog2(HIST_DEPTH)-1:0] head_idx,
-  input sample_t x_tap_out,
-  input sample_t w_tap_out,
-  output logic [$clog2(HIST_DEPTH)-1:0] x_tap_sel,
-  output logic [$clog2(TAP_LEN)-1:0] w_tap_sel,
-  output accum_t y_n,
-  output logic y_n_ready
+    input logic [$clog2(HIST_DEPTH)-1:0] head_idx,
+    input sample_t x_tap_out,
+    input sample_t w_tap_out,
+    output logic [$clog2(HIST_DEPTH)-1:0] x_tap_sel,
+    output logic [$clog2(TAP_LEN)-1:0] w_tap_sel,
+    output accum_t y_n,
+    output logic y_n_ready
 );
 
   // y[n] = sum_k w[k] * x[n-1-k]: newest tap (k=0) reaches x[n-1], so the
@@ -37,15 +37,15 @@ module anti_noise
       acc_num   <= '0;
       y_n       <= '0;
       y_n_ready <= 1'b0;
-    
-    // start TAP_LEN cycle MAC
+
+      // start TAP_LEN cycle MAC
     end else if (x_n_new) begin
       active    <= 1'b1;
       acc_num   <= '0;
       y_n       <= '0;
       y_n_ready <= 1'b0;
 
-    // cont MAC
+      // cont MAC
     end else if (active) begin
       y_n <= y_n + accum_t'(w_tap_out) * accum_t'(x_tap_out);
 
@@ -55,12 +55,12 @@ module anti_noise
         y_n_ready <= 1'b1;
 
 
-      // MAC not full,
+        // MAC not full,
       end else begin
         acc_num   <= acc_num + 1'b1;
         y_n_ready <= 1'b0;
       end
-    
+
     end else begin
       y_n_ready <= 1'b0;
     end

@@ -16,14 +16,14 @@ DV_PKG_DIR="$DV_DIR/pkg"
 # testbench name -> (tb source, vcd name, rtl source list, colon-separated)
 declare -A TBS=(
   [sample_in]="sample_in_tb.sv|sample_in_tb.vcd|sample_in.sv"
-  [anti_noise]="anti_noise_tb.sv|anti_noise_tb.vcd|anti_noise_est.sv"
+  [anti_noise]="anti_noise_tb.sv|anti_noise_tb.vcd|anti_noise.sv"
   [regfile]="regfile_tb.sv|regfile_tb.vcd|regfile.sv"
   [error_block]="error_block_tb.sv|error_block_tb.vcd|error_block.sv"
   [s_hat_fir]="s_hat_fir_tb.sv|s_hat_fir_tb.vcd|regfile.sv:s_hat_fir.sv"
-  [anc]="anchor_top_tb.sv|anchor_top_tb.vcd|regfile.sv:sample_in.sv:anti_noise_est.sv:error_block.sv:s_hat_fir.sv:anchor_top.sv"
+  [anc]="anchor_top_tb.sv|anchor_top_tb.vcd|regfile.sv:sample_in.sv:anti_noise.sv:error_block.sv:s_hat_fir.sv:anchor_top.sv"
   [mmio]="mmio_regs_tb.sv|mmio_regs_tb.vcd|mmio_regs.sv"
   [serial]="serial_bridge_tb.sv|serial_bridge_tb.vcd|serial_bridge.sv"
-  [tt_um]="tt_um_anchor_tb.sv|tt_um_anchor_tb.vcd|regfile.sv:sample_in.sv:anti_noise_est.sv:error_block.sv:s_hat_fir.sv:anchor_top.sv:mmio_regs.sv:serial_bridge.sv:tt_um_anchor.sv"
+  [tt_um]="tt_um_anchor_tb.sv|tt_um_anchor_tb.vcd|regfile.sv:sample_in.sv:anti_noise.sv:error_block.sv:s_hat_fir.sv:anchor_top.sv:mmio_regs.sv:serial_bridge.sv:tt_um_anchor.sv"
 )
 
 SET="${1:-sample_in}"

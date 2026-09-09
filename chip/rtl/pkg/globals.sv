@@ -20,9 +20,9 @@ package globals;
   parameter int EPS_RAW   = 84;   // 1e-5 in Q1.23
 
 
-  typedef logic signed[WORD_LEN-1:0] sample_t;
-  typedef logic signed[ACCUM_LEN-1:0] accum_t;
-  typedef logic signed[15:0] xf_t;    // Q2.14 filtered reference
-  typedef logic signed[31:0] step_t;  // Q15.17 NLMS step (mu)
+  typedef logic signed [WORD_LEN-1:0] sample_t;
+  typedef logic signed [ACCUM_LEN-1:0] accum_t;
+  typedef logic signed [15:0] xf_t;  // Q2.14 filtered reference
+  typedef logic signed [31:0] step_t;  // Q15.17 NLMS step (mu)
 
 endpackage

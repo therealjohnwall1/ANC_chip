@@ -12,37 +12,37 @@
 module error_block
   import globals::*;
 (
-  input logic clk,
-  input logic rst_n,
+    input logic clk,
+    input logic rst_n,
 
-  // one-cycle pulse starts a full update pass; ignored while busy, so the
-  // top level must wait for w_n_updated before feeding the next e(n)
-  input logic e_n_valid,
-  input sample_t e_n,
+    // one-cycle pulse starts a full update pass; ignored while busy, so the
+    // top level must wait for w_n_updated before feeding the next e(n)
+    input logic e_n_valid,
+    input sample_t e_n,
 
-  // scan index for both the weights memory and the x_f line memory
-  output logic [$clog2(TAP_LEN)-1:0] tap_idx,
-  input sample_t w_n_tap,   // w[tap_idx], Q1.15
-  input xf_t x_fn_tap,      // x_f window[tap_idx], Q2.14
+    // scan index for both the weights memory and the x_f line memory
+    output logic    [$clog2(TAP_LEN)-1:0] tap_idx,
+    input  sample_t                       w_n_tap,  // w[tap_idx], Q1.15
+    input  xf_t                           x_fn_tap, // x_f window[tap_idx], Q2.14
 
-  output sample_t w_new_tap,
-  output logic w_wr_en,     // high the cycle w_new_tap/tap_idx are stable;
-                            // the weights memory samples them on the edge
-                            // that ends the cycle
-  output logic w_n_updated, // one-cycle pulse, all TAP_LEN taps written
-  output logic mu_saturated // sticky per update: mu exceeded step_t
+    output sample_t w_new_tap,
+    output logic w_wr_en,     // high the cycle w_new_tap/tap_idx are stable;
+                              // the weights memory samples them on the edge
+                              // that ends the cycle
+    output logic w_n_updated, // one-cycle pulse, all TAP_LEN taps written
+    output logic mu_saturated // sticky per update: mu exceeded step_t
 );
 
   // the divider toggles every cycle for ~64 cycles a sample; don't trace it
   /* verilator tracing_off */
 
-  localparam int TAP_CNT_W    = $clog2(TAP_LEN);
-  localparam int SAMPLE_FRAC  = WORD_LEN - 1;                     // 15, Q1.15
-  localparam int ACC_FRAC     = 2 * SAMPLE_FRAC;                  // 30
-  localparam int ACC_SHIFT    = ACC_FRAC - 2 * XF_FRAC;           // 2
-  localparam int NUM_SHIFT    = ACC_FRAC + STEP_FRAC - LR_FRAC;   // 32, update.py:117
-  localparam int DELTA_FRAC   = STEP_FRAC + SAMPLE_FRAC + XF_FRAC; // 46, mu*e*x_f
-  localparam int W_SHIFT      = DELTA_FRAC - SAMPLE_FRAC;         // 31, align w to delta
+  localparam int TAP_CNT_W = $clog2(TAP_LEN);
+  localparam int SAMPLE_FRAC = WORD_LEN - 1;  // 15, Q1.15
+  localparam int ACC_FRAC = 2 * SAMPLE_FRAC;  // 30
+  localparam int ACC_SHIFT = ACC_FRAC - 2 * XF_FRAC;  // 2
+  localparam int NUM_SHIFT = ACC_FRAC + STEP_FRAC - LR_FRAC;  // 32, update.py:117
+  localparam int DELTA_FRAC = STEP_FRAC + SAMPLE_FRAC + XF_FRAC;  // 46, mu*e*x_f
+  localparam int W_SHIFT = DELTA_FRAC - SAMPLE_FRAC;  // 31, align w to delta
 
   localparam accum_t EPS_ACC = accum_t'(EPS_RAW) <<< (ACC_FRAC - EPS_FRAC);
 
@@ -50,7 +50,13 @@ module error_block
   assign div_num = accum_t'(LR_RAW) <<< NUM_SHIFT;
 
   typedef enum logic [2:0] {
-    S_IDLE, S_ENERGY, S_DIV_SETUP, S_DIV, S_DIV_ROUND, S_UPD_READ, S_UPD_WRITE
+    S_IDLE,
+    S_ENERGY,
+    S_DIV_SETUP,
+    S_DIV,
+    S_DIV_ROUND,
+    S_UPD_READ,
+    S_UPD_WRITE
   } state_t;
 
   state_t state;
@@ -64,10 +70,10 @@ module error_block
   accum_t div_den;
   logic [64:0] div_rem;
   logic [63:0] div_quot;
-  logic [5:0]  div_cnt;
+  logic [5:0] div_cnt;
 
   logic [64:0] rem_shift, rem_sub;
-  logic        div_ge;
+  logic div_ge;
 
   assign rem_shift = {div_rem[63:0], div_num[div_cnt]};
   assign rem_sub   = rem_shift - {1'b0, div_den};
@@ -82,27 +88,27 @@ module error_block
   step_t mu_q;
 
   accum_t delta_raw, sum_raw, sum_floor, rounded;
-  logic   half_bit, frac_nonzero, round_up;
+  logic half_bit, frac_nonzero, round_up;
   sample_t w_rounded;
 
   localparam accum_t SAMPLE_MAX = accum_t'(32767);
   localparam accum_t SAMPLE_MIN = -accum_t'(32768);
 
-  assign delta_raw = accum_t'(mu_q) * accum_t'(e_n_q) * accum_t'(x_fn_tap);
-  assign sum_raw   = (accum_t'(w_n_tap) <<< W_SHIFT) + delta_raw;
+  assign delta_raw    = accum_t'(mu_q) * accum_t'(e_n_q) * accum_t'(x_fn_tap);
+  assign sum_raw      = (accum_t'(w_n_tap) <<< W_SHIFT) + delta_raw;
 
   // round-half-to-even (bankers), matching golden Fxp rounding="around":
   // q = floor(sum / 2^W_SHIFT); round up when > half, or == half and q odd.
   assign sum_floor    = sum_raw >>> W_SHIFT;
-  assign half_bit     = sum_raw[W_SHIFT-1];     // top fractional bit (>= half)
+  assign half_bit     = sum_raw[W_SHIFT-1];  // top fractional bit (>= half)
   assign frac_nonzero = |sum_raw[W_SHIFT-2:0];  // any lower fractional bit
   assign round_up     = half_bit & (frac_nonzero | sum_floor[0]);
   assign rounded      = sum_floor + accum_t'(round_up);
 
   always_comb begin
-    if (rounded > SAMPLE_MAX)       w_rounded = 16'sd32767;
-    else if (rounded < SAMPLE_MIN)  w_rounded = 16'sh8000;
-    else                            w_rounded = sample_t'(rounded[15:0]);
+    if (rounded > SAMPLE_MAX) w_rounded = 16'sd32767;
+    else if (rounded < SAMPLE_MIN) w_rounded = 16'sh8000;
+    else w_rounded = sample_t'(rounded[15:0]);
   end
 
   always_ff @(posedge clk) begin

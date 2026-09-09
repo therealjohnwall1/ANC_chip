@@ -13,7 +13,7 @@ module s_hat_fir_tb;
   `include "s_hat_fir_vectors.svh"
 
   localparam time CLK_PERIOD = 20ns;
-  localparam int TAP_CNT_W = $clog2(TAP_LEN);
+  localparam int  TAP_CNT_W  = $clog2(TAP_LEN);
 
   logic clk;
   logic rst_n;
@@ -32,24 +32,24 @@ module s_hat_fir_tb;
   sample_t sh_rd_data;
 
   s_hat_fir dut (
-    .clk        (clk),
-    .rst_n      (rst_n),
-    .x_n_new    (x_n_new),
-    .x_n        (x_n),
-    .tap_idx    (tap_idx),
-    .x_fn_tap   (x_fn_tap),
-    .x_f_ready  (x_f_ready),
-    .x_f_valid  (x_f_valid),
-    .sh_wr_sel  (sh_wr_sel),
-    .sh_wr_data (sh_wr_data),
-    .sh_wr_en   (sh_wr_en),
-    .sh_rd_sel  (sh_rd_sel),
-    .sh_rd_data (sh_rd_data)
+      .clk       (clk),
+      .rst_n     (rst_n),
+      .x_n_new   (x_n_new),
+      .x_n       (x_n),
+      .tap_idx   (tap_idx),
+      .x_fn_tap  (x_fn_tap),
+      .x_f_ready (x_f_ready),
+      .x_f_valid (x_f_valid),
+      .sh_wr_sel (sh_wr_sel),
+      .sh_wr_data(sh_wr_data),
+      .sh_wr_en  (sh_wr_en),
+      .sh_rd_sel (sh_rd_sel),
+      .sh_rd_data(sh_rd_data)
   );
 
   initial begin
     clk = 1'b0;
-    forever #(CLK_PERIOD/2) clk = ~clk;
+    forever #(CLK_PERIOD / 2) clk = ~clk;
   end
 
   initial begin
@@ -65,7 +65,7 @@ module s_hat_fir_tb;
       sh_wr_en   = 1'b1;
       @(posedge clk);
       @(negedge clk);
-      sh_wr_en = 1'b0;
+      sh_wr_en  = 1'b0;
       // readback, one address behind the write for pacing
       sh_rd_sel = TAP_CNT_W'(k);
       if (sh_rd_data !== sample_t'(SH_S[k]))
@@ -90,8 +90,7 @@ module s_hat_fir_tb;
           tap_idx = '0;
           #1;
           if (x_fn_tap !== xf_t'(SH_XF[j-1]))
-            $fatal(1, "x_f[%0d] = %h, expected %h (window[0])",
-                   j-1, x_fn_tap, SH_XF[j-1]);
+            $fatal(1, "x_f[%0d] = %h, expected %h (window[0])", j - 1, x_fn_tap, SH_XF[j-1]);
         end
         // x_f_ready must be a one-cycle pulse
         @(posedge clk);
@@ -104,9 +103,13 @@ module s_hat_fir_tb;
 
   initial begin
     rst_n = 1'b0;
-    x_n_new = 1'b0; x_n = '0;
+    x_n_new = 1'b0;
+    x_n = '0;
     tap_idx = '0;
-    sh_wr_sel = '0; sh_wr_data = '0; sh_wr_en = 1'b0; sh_rd_sel = '0;
+    sh_wr_sel = '0;
+    sh_wr_data = '0;
+    sh_wr_en = 1'b0;
+    sh_rd_sel = '0;
     repeat (4) @(posedge clk);
     rst_n = 1'b1;
     repeat (2) @(posedge clk);
@@ -118,8 +121,7 @@ module s_hat_fir_tb;
     $display("load_shat: 32 coefficients written and read back");
 
     // feed all samples; incremental check verifies each x_f[k-1] as it lands
-    for (int j = 0; j < SH_M; j++)
-      feed_sample(j);
+    for (int j = 0; j < SH_M; j++) feed_sample(j);
 
     if (x_f_valid !== 1'b1) $fatal(1, "x_f_valid never went high");
 
@@ -127,9 +129,15 @@ module s_hat_fir_tb;
     for (int t = 0; t < TAP_LEN; t++) begin
       tap_idx = TAP_CNT_W'(t);
       @(negedge clk);
-      if (x_fn_tap !== xf_t'(SH_XF[SH_M - 2 - t]))
-        $fatal(1, "window[%0d] = %h, expected x_f[%0d] = %h",
-               t, x_fn_tap, SH_M - 2 - t, SH_XF[SH_M - 2 - t]);
+      if (x_fn_tap !== xf_t'(SH_XF[SH_M-2-t]))
+        $fatal(
+            1,
+            "window[%0d] = %h, expected x_f[%0d] = %h",
+            t,
+            x_fn_tap,
+            SH_M - 2 - t,
+            SH_XF[SH_M-2-t]
+        );
     end
 
     $display("T=%0t: s_hat_fir_tb done.", $time);
