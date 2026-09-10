@@ -21,6 +21,7 @@ obj_dir/
 # OpenROAD-flow-scripts outputs
 chip/syn/work/
 
+*.gds
 
 *.swp
 

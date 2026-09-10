@@ -1,6 +1,8 @@
 # Noise Canceling Model/Chip design
 **about**: active noise canceling chip intended for asic, prototyped on fpga
 
+![final_all](chip/doc/png/final_all.png)
+
 ## Directories
 - **scripts**: python scripts to simulate the logic and create golden results for the logic on Chip
   - **audio_sim**: duct/decay/span geometry models feeding the tap budget
