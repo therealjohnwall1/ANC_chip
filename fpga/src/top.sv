@@ -1,12 +1,12 @@
 // top.sv -- Real Digital Blackboard (Zynq XC7Z007S-1) wrapper for the anchor ANC chip.
 //
-// One copy of anchor_top is shared between two drivers, selected by SW0:
+// One copy of anchor_top is shared between three drivers:
 //
-//   SW0 = 0 (default)  on-chip self-test: self_test replays reduced golden
-//                      vectors through the datapath and reports pass/fail on
-//                      the LEDs / RGB LED.
-//   SW0 = 1            PmodA SPI/MMIO host interface: serial_bridge + mmio_regs
-//                      expose the register map (same map as the ASIC) on PmodA.
+//   SW1 = 0 (default)  mic-driven ANC loop (anc_loop): the on-board PDM mic is
+//                      the reference x, the error mic is simulated as FIR
+//                      matmuls (P(z)/S(z)); the live stream carries x/d/y/e.
+//   SW1 = 1, SW0 = 0   on-chip self-test (reduced golden vectors), pass/fail on LEDs.
+//   SW1 = 1, SW0 = 1   PmodA SPI/MMIO host interface (register map as the ASIC).
 //
 // The SPI/MMIO wiring matches chip/rtl/tt_um_anchor.sv; that wrapper is left
 // untouched for the TinyTapeout flow.
@@ -93,6 +93,25 @@ module top
   logic       st_sh_wr_en;
   logic       st_busy, st_done, st_pass;
 
+  // ---- mic capture ----
+  logic signed [15:0] mic_pcm;
+  logic               mic_valid;
+  logic [31:0]        mic_idx;
+
+  // ---- anc_loop (mic-driven closed loop) ----
+  logic       al_adc_valid, al_err_valid;
+  logic [INPUT_WIDTH-1:0] al_adc_data, al_err_data;
+  logic [$clog2(TAP_LEN)-1:0] al_sh_wr_sel, al_w_rd_sel;
+  sample_t    al_sh_wr_data;
+  logic       al_sh_wr_en;
+  logic signed [15:0] al_x, al_d, al_y, al_e;
+  logic       al_valid;
+  logic [31:0] al_idx;
+
+  // SW1: 0 = mic-driven ANC loop (default), 1 = legacy self-test / SPI
+  logic anc_en;
+  assign anc_en = ~sw[1];
+
   // ---- muxed datapath inputs ----
   logic       adc_valid, err_valid;
   logic [INPUT_WIDTH-1:0] adc_data, err_data;
@@ -159,7 +178,7 @@ module top
   self_test u_self_test (
       .clk         (clk_anc),
       .rst_n       (rst_n),
-      .run         (test_mode),
+      .run         (test_mode & ~anc_en),
       .adc_valid   (st_adc_valid),
       .adc_data    (st_adc_data),
       .err_valid   (st_err_valid),
@@ -181,15 +200,15 @@ module top
   // ========================================================================
   // Datapath (single instance, muxed inputs)
   // ========================================================================
-  assign adc_valid  = test_mode ? st_adc_valid  : mm_adc_valid;
-  assign adc_data   = test_mode ? st_adc_data   : mm_adc_data;
-  assign err_valid  = test_mode ? st_err_valid  : mm_err_valid;
-  assign err_data   = test_mode ? st_err_data   : mm_err_data;
-  assign sh_wr_sel  = test_mode ? st_sh_wr_sel  : mm_sh_wr_sel;
-  assign sh_wr_data = test_mode ? st_sh_wr_data : mm_sh_wr_data;
-  assign sh_wr_en   = test_mode ? st_sh_wr_en   : mm_sh_wr_en;
-  assign sh_rd_sel  = test_mode ? '0            : mm_sh_rd_sel;
-  assign w_rd_sel   = test_mode ? st_w_rd_sel   : mm_w_rd_sel;
+  assign adc_valid  = anc_en ? al_adc_valid  : (test_mode ? st_adc_valid  : mm_adc_valid);
+  assign adc_data   = anc_en ? al_adc_data   : (test_mode ? st_adc_data   : mm_adc_data);
+  assign err_valid  = anc_en ? al_err_valid  : (test_mode ? st_err_valid  : mm_err_valid);
+  assign err_data   = anc_en ? al_err_data   : (test_mode ? st_err_data   : mm_err_data);
+  assign sh_wr_sel  = anc_en ? al_sh_wr_sel  : (test_mode ? st_sh_wr_sel  : mm_sh_wr_sel);
+  assign sh_wr_data = anc_en ? al_sh_wr_data : (test_mode ? st_sh_wr_data : mm_sh_wr_data);
+  assign sh_wr_en   = anc_en ? al_sh_wr_en   : (test_mode ? st_sh_wr_en   : mm_sh_wr_en);
+  assign sh_rd_sel  = anc_en ? '0            : (test_mode ? '0            : mm_sh_rd_sel);
+  assign w_rd_sel   = anc_en ? al_w_rd_sel   : (test_mode ? st_w_rd_sel   : mm_w_rd_sel);
 
   anchor_top u_anchor (
       .clk         (clk_anc),
@@ -220,17 +239,8 @@ module top
   );
 
   // ========================================================================
-  // JTAG (BSCANE2 USER1) sample streamer -- option C live-test link
-  //
-  // On-board PDM mic -> PCM (16 kHz) -> rolling window (clk domain); the JTAG
-  // capture snaps {index, window} so the host can de-duplicate overlaps.
+  // mic -> ANC loop -> live stream (x, d, y, e) over JTAG USER1
   // ========================================================================
-  localparam int NSAMP = 16;
-
-  logic signed [15:0] mic_pcm;
-  logic               mic_valid;
-  logic [31:0]        mic_idx;
-
   pdm_mic u_mic (
       .clk       (clk),
       .rst_n     (rst_n),
@@ -241,24 +251,54 @@ module top
       .sample_idx(mic_idx)
   );
 
-  logic [15:0] win[0:NSAMP-1];  // win[NSAMP-1] = newest
-  logic [31:0] win_idx;
+  anc_loop u_anc (
+      .clk(clk_anc),
+      .rst_n(rst_n),
+      .x_in(mic_pcm),
+      .x_valid(mic_valid & anc_en),
+      .sample_idx_in(mic_idx),
+      .ready(),
+      .adc_valid(al_adc_valid),
+      .adc_data(al_adc_data),
+      .err_valid(al_err_valid),
+      .err_data(al_err_data),
+      .sh_wr_sel(al_sh_wr_sel),
+      .sh_wr_data(al_sh_wr_data),
+      .sh_wr_en(al_sh_wr_en),
+      .w_rd_sel(al_w_rd_sel),
+      .y_n(y_n),
+      .y_n_ready(y_n_ready),
+      .x_f_ready(x_f_ready),
+      .w_n_updated(w_n_updated),
+      .x_out(al_x),
+      .d_out(al_d),
+      .y_out(al_y),
+      .e_out(al_e),
+      .out_valid(al_valid),
+      .sample_idx_out(al_idx)
+  );
+
+  // rolling window of QSAMP (x,d,y,e) quadruples; sample = {x,d,y,e} (e low)
+  localparam int QSAMP = 8;
+  localparam int QW = 64;
+  logic [QW-1:0] qwin[0:QSAMP-1];  // qwin[QSAMP-1] = newest
+  logic [31:0] qwin_idx;
 
   always_ff @(posedge clk) begin
-    if (mic_valid) begin
-      for (int k = 0; k < NSAMP - 1; k++) win[k] <= win[k+1];
-      win[NSAMP-1] <= mic_pcm;
-      win_idx      <= mic_idx;
+    if (al_valid) begin
+      for (int k = 0; k < QSAMP - 1; k++) qwin[k] <= qwin[k+1];
+      qwin[QSAMP-1] <= {al_x, al_d, al_y, al_e};
+      qwin_idx      <= al_idx;
     end
   end
 
-  logic [NSAMP*16-1:0] win_packed;
+  logic [QSAMP*QW-1:0] qwin_packed;
   always_comb
-    for (int k = 0; k < NSAMP; k++) win_packed[k*16+:16] = win[k];
+    for (int k = 0; k < QSAMP; k++) qwin_packed[k*QW+:QW] = qwin[k];
 
-  localparam int STREAM_W = NSAMP * 16 + 32;
+  localparam int STREAM_W = QSAMP * QW + 32;
   logic [STREAM_W-1:0] stream_data;
-  assign stream_data = {win_idx, win_packed};
+  assign stream_data = {qwin_idx, qwin_packed};
 
   jtag_stream #(
       .WIDTH(STREAM_W)
@@ -275,21 +315,21 @@ module top
   logic [24:0] hb = '0;
   always_ff @(posedge clk_anc) hb <= hb + 1'b1;
 
-  assign led[0]   = st_pass;
+  assign led[0]   = al_valid;  // ANC sample active
   assign led[1]   = st_done;
   assign led[2]   = st_busy;
-  assign led[3]   = st_done & ~st_pass;  // fail
-  assign led[4]   = test_mode;
+  assign led[3]   = st_done & ~st_pass;  // self-test fail
+  assign led[4]   = anc_en;              // ANC mode
   assign led[5]   = hb[24];
   assign led[9:6] = 4'b0;
 
-  assign rgb_a = st_pass ? 3'b010 :  // green
-                 st_done ? 3'b100 :  // red
-                 st_busy ? 3'b001 :  // blue
-                 3'b000;
+  assign rgb_a = anc_en ? 3'b001 :           // blue = ANC loop mode
+                 st_pass ? 3'b010 :          // green = self-test pass
+                 st_done ? 3'b100 :          // red = self-test fail
+                 st_busy ? 3'b001 : 3'b000;
   assign rgb_b = 3'b0;
 
   logic _unused;
-  assign _unused = ^{btn, sw[11:1], adc_rdy, err_rdy, x_n_new, x_n, x_tap_out, head_idx};
+  assign _unused = ^{btn, sw[11:2], adc_rdy, err_rdy, x_n_new, x_n, x_tap_out, head_idx};
 
 endmodule

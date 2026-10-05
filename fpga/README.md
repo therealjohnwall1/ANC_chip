@@ -129,18 +129,24 @@ on a 25 MHz divided clock). The register map is documented at the top of
 
 ## JTAG live link (option C)
 
-`src/jtag_stream.sv` exposes a window of 16×16-bit samples **plus a 32-bit
-sample index** on the FPGA's JTAG **USER1** data register via a `BSCANE2`
-primitive. The stream currently carries the **on-board PDM microphone**
-(`src/pdm_mic.sv`): `M_CLK`=N15 @ 2 MHz, `M_DATA`=L14 decimated ×125 → 16 kHz
-PCM. The host de-duplicates overlapping windows with the index.
+`src/jtag_stream.sv` exposes a window of samples **plus a 32-bit sample index**
+on the FPGA's JTAG **USER1** data register via a `BSCANE2` primitive. The host
+de-duplicates overlapping windows with the index.
+
+With **SW1=0** (default) the FPGA runs the **mic-driven ANC loop**: the on-board
+PDM mic (`src/pdm_mic.sv`, `M_CLK`=N15 @2 MHz, `M_DATA`=L14 ÷125 → 16 kHz) is
+the reference `x`, and `anc_loop.sv` synthesizes the error mic as FIR matmuls
+(`d=P(z)x`, `y_s=S(z)y`, `e=d-y_s`). The stream carries `NSAMP=8` quadruples
+`{x,d,y,e}` ("q4" format). **SW1=1** selects the legacy self-test (SW0=0) /
+PmodA SPI (SW0=1); the mic-only build used the "mic" format.
 
 From the repo root the wrapper handles venv + deps:
 ```sh
-./livetest_c.sh                 # print a few windows (raw)
-./livetest_c.sh plot            # live rolling waveform + spectrum (16 kHz)
+./livetest_c.sh                 # print a few q4 windows (raw)
+./livetest_c.sh plot            # live d vs e (rolling) + FFT + attenuation dB
+./livetest_c.sh --fmt mic plot  # read the older mic-only build
 ```
-(or directly: `fpga/host/.venv/bin/python fpga/host/jtag_live.py <raw|plot>`.)
+(or directly: `fpga/host/.venv/bin/python fpga/host/jtag_live.py --fmt q4 <raw|plot>`.)
 
 The Zynq JTAG chain has two TAPs (TDI → ARM DAP ir=4 → PL ir=6 → TDO); the host
 sets PL=USER1 and ARM=BYPASS, then scans the DR repeatedly (length
