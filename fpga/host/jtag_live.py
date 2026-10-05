@@ -128,7 +128,7 @@ def cmd_plot_mic(js, seconds, fs=16000, fps=30, nwin=2000, fft=1024):
 
     plt.ion()
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6))
-    fig.suptitle(f"anchor FPGA on-board mic ('{ch}') -- rolling window")
+    fig.suptitle(f"anchor FPGA on-board mic '{ch}' (REAL, reference) -- rolling window")
     (ln,) = ax1.plot([], [], lw=1, color="tab:blue")
     ax1.set_xlim(0, nwin)
     ax1.set_xlabel("samples (most recent at right)")
@@ -186,7 +186,8 @@ def cmd_plot(js, seconds, fs=16000, fps=30, nwin=2000, fft=1024):
 
     plt.ion()
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6))
-    fig.suptitle(f"anchor FPGA -- JTAG '{('-'.join(js.chans))}' stream")
+    fig.suptitle(f"anchor ANC -- x real mic, d/e SIMULATED error path "
+                 f"(no speaker/2nd mic)")
     lines = {}
     for c, col in zip(js.chans, ("0.7", "tab:blue", "tab:green", "tab:red")):
         (lines[c],) = ax1.plot([], [], lw=1, color=col, label=c)
@@ -232,7 +233,7 @@ def cmd_plot(js, seconds, fs=16000, fps=30, nwin=2000, fft=1024):
                     pe = float(np.sum(snap("e") ** 2))
                     if pe > 0 and pd > 0:
                         import math
-                        fig.suptitle(f"anchor FPGA ANC -- attenuation "
+                        fig.suptitle(f"anchor ANC (SIMULATED error) -- attenuation "
                                      f"{10 * math.log10(pd / pe):.1f} dB")
             fig.canvas.draw_idle()
             fig.canvas.flush_events()
