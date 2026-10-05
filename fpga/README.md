@@ -20,12 +20,51 @@ fpga/
   build.tcl       the Vivado script (read sources -> synth -> pnr -> bitstream)
   design.mk       TOP / PART / FLASH_ARGS (also read by `psync ... flash`)
   constr/top.xdc  Blackboard pin constraints (clock, LEDs, PmodA SPI)
+  scripts/gen_selftest_vectors.py   regenerate the on-chip test vectors
+  tb/             Verilator self-test testbench (tb/run.sh)
   src/
-    top.sv        Blackboard wrapper
-    pkg/globals.sv  fixed-point formats & parameters (read first)
+    top.sv        Blackboard wrapper (SPI/MMIO + self-test mux)
+    self_test.sv  on-chip golden-vector self-test FSM
+    pkg/globals.sv          fixed-point formats & parameters (read first)
+    pkg/selftest_params.sv  generated: ANC_N, ANC_PRIME, X_LEN, Y_CHK
+    mem/          generated ROMs: x.mem, e.mem, w.mem, shat.mem
     anchor_top.sv anti_noise.sv error_block.sv s_hat_fir.sv sample_in.sv
     regfile.sv mmio_regs.sv serial_bridge.sv tt_um_anchor.sv
   build/          Vivado output (gitignored)
+```
+
+SW0 selects what drives the single `anchor_top` instance:
+
+| SW0 | mode                                                     |
+|-----|----------------------------------------------------------|
+| 0   | **on-chip self-test** (default) — pass/fail on LEDs      |
+| 1   | **PmodA SPI/MMIO** host interface                        |
+
+LEDs: `led[0]=pass`, `led[1]=done`, `led[2]=busy`, `led[3]=fail`,
+`led[4]=SW0/mode`, `led[5]=heartbeat`; RGB LED: green=pass, red=fail,
+blue=running.
+
+## On-chip self-test
+
+`self_test.sv` replays reduced golden vectors (default `ANC_N=1024`) through
+`anchor_top`, in the same stage order as `chip/dv/anchor_top_tb.sv`, then
+checks the final `w[]` and a 64-bit rotate-xor checksum of every `y[n]`.
+`y[n]` is not stored — the checksum+weights are the pass criterion.
+
+Regenerate the vectors after an RTL change (`make fmt`/lint, then):
+
+```sh
+.venv/bin/python fpga/scripts/gen_selftest_vectors.py     # ANC_N env overrides size
+```
+
+This rewrites `src/mem/*.mem` and `src/pkg/selftest_params.sv` (both committed
+so a Vivado-only user can build without Python). The hardware recurrence is
+`chk <= {chk[62:0], chk[63]} ^ y_n`.
+
+Simulate the self-test before building:
+
+```sh
+fpga/tb/run.sh        # Verilator; prints PASS and writes tb/run/out/self_test_tb.vcd
 ```
 
 `src/*.sv` are **copies** of `../chip/rtl` (Vivado's non-project flow only reads
@@ -76,5 +115,9 @@ documented at the top of `src/mmio_regs.sv`.
 
 - `globals.sv` must be read before the modules (they `import globals::*` in
   their port lists); `build.tcl` reads `src/pkg/*.sv` first for this reason.
+- `build.tcl` copies `src/mem/*.mem` into the run dir so the self-test ROMs'
+  relative `$readmemh` paths resolve.
 - No PLL: the 100 MHz board clock runs the design directly.
-- `btn`/`sw` are reserved for the on-chip bring-up/self-test FSM.
+- One `anchor_top` instance is shared between the self-test and the PmodA SPI
+  path, selected by SW0. `chip/rtl/tt_um_anchor.sv` is kept untouched for the
+  TinyTapeout flow; `top.sv` repeats its SPI/MMIO wiring plus the mux.

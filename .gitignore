@@ -16,6 +16,7 @@ env/
 obj_dir/
 *.vcd
 *.fst
+fpga/tb/run/
 
 
 # OpenROAD-flow-scripts outputs

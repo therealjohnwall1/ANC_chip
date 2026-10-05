@@ -12,6 +12,9 @@ foreach f [glob -nocomplain $root/src/*.v]                 { read_verilog $f }
 foreach f [glob -nocomplain $root/src/*.sv]                { read_verilog -sv $f }
 foreach f [glob -nocomplain $root/src/*.vhd $root/src/*.vhdl] { read_vhdl $f }
 foreach f [glob -nocomplain $root/src/*.mem]               { add_files $f }
+# On-chip self-test vector ROMs: copy next to the run dir so $readmemh
+# (relative paths) resolves during synthesis.
+foreach f [glob -nocomplain $root/src/mem/*.mem]           { file copy -force $f [file tail $f] }
 foreach f [glob -nocomplain $root/constr/*.xdc]            { read_xdc $f }
 
 # IP: copy each .xci into build/ so generated output never lands in the
