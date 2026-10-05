@@ -125,3 +125,10 @@ on a 25 MHz divided clock). The register map is documented at the top of
 - One `anchor_top` instance is shared between the self-test and the PmodA SPI
   path, selected by SW0. `chip/rtl/tt_um_anchor.sv` is kept untouched for the
   TinyTapeout flow; `top.sv` repeats its SPI/MMIO wiring plus the mux.
+
+## Bring-up status
+
+| date       | build result                                                        |
+|------------|---------------------------------------------------------------------|
+| 2026-10-04 | Vivado 2026.1 (piserver), `make` OK, **WNS +7.97 ns** @ 25 MHz, 1805 LUTs (12.5%), 1.5 BRAM, 8 DSPs, 23 IOB |
+| 2026-10-04 | flashed via `openFPGALoader`; self-test matches the Verilator run (SW0=0 → RGB green, `led[0]`=pass, `led[1]`=done) |
