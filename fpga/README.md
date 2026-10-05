@@ -127,6 +127,24 @@ on a 25 MHz divided clock). The register map is documented at the top of
   path, selected by SW0. `chip/rtl/tt_um_anchor.sv` is kept untouched for the
   TinyTapeout flow; `top.sv` repeats its SPI/MMIO wiring plus the mux.
 
+## JTAG live link (option C)
+
+`src/jtag_stream.sv` exposes a window of 16×16-bit samples on the FPGA's JTAG
+**USER1** data register via a `BSCANE2` primitive. `host/jtag_live.py` pulls
+windows over the existing USB JTAG cable (pyftdi) — no extra adapter and no PS:
+
+```sh
+fpga/host/.venv/bin/python fpga/host/jtag_live.py \
+    --url ftdi://ftdi:2232:8871482302DF/1 ramp --count 8
+fpga/host/.venv/bin/python fpga/host/jtag_live.py ... plot
+```
+
+The Zynq JTAG chain has two TAPs (TDI → ARM DAP ir=4 → PL ir=6 → TDO); the host
+sets PL=USER1 and ARM=BYPASS, then scans the DR repeatedly (length
+`16*16+1`). This build streams a self-contained ramp to validate the transport;
+the source is swapped for mic/ANC samples next. Verilator uses the passive
+`src/bscan_sim_stub.sv` model for `BSCANE2`.
+
 ## Bring-up status
 
 | date       | build result                                                        |
