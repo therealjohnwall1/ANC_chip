@@ -69,53 +69,68 @@ def cmd_ramp(js, count):
     print("hint: expect 0 1 2 3 ... 15, then 16 17 ... 31, ...")
 
 
-def cmd_plot(js, seconds, fps=30):
+def cmd_plot(js, seconds, fps=30, nwin=2000, fft=1024):
+    """Scrolling (rolling-window) display of the sample stream."""
     import numpy as np
     import matplotlib.pyplot as plt
     import matplotlib.animation as anim
 
-    ring = deque(maxlen=4096)
+    ring = deque(maxlen=nwin)  # rolling window of the most recent samples
     stop = threading.Event()
+    lock = threading.Lock()
 
     def reader():
         while not stop.is_set():
-            ring.extend(js.read_window())
+            w = js.read_window()
+            with lock:
+                ring.extend(w)
 
     th = threading.Thread(target=reader, daemon=True)
     th.start()
 
+    plt.ion()
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6))
-    fig.suptitle("anchor FPGA JTAG (USER1) stream")
+    fig.suptitle("anchor FPGA JTAG (USER1) -- rolling window")
     (ln,) = ax1.plot([], [], lw=1)
-    ax1.set_ylim(-1, 64)
-    ax1.set_ylabel("sample")
+    ax1.set_xlim(0, nwin)
+    ax1.set_xlabel("samples (most recent at right)")
+    ax1.set_ylabel("value")
     (fl,) = ax2.plot([], [], lw=1)
-    ax2.set_xlim(0, 8000)
+    ax2.set_xlim(0, fft // 2)
+    ax2.set_xlabel("bin")
     ax2.set_ylabel("|FFT|")
+    fig.tight_layout()
 
     t0 = time.time()
 
-    def upd(_):
-        if len(ring) < 64:
-            return ln, fl
-        y = np.fromiter(ring, dtype=np.float64)
-        ax1.set_xlim(0, len(y))
-        ln.set_data(np.arange(len(y)), y)
-        seg = y[-2048:]
+    def upd():
+        with lock:
+            y = np.fromiter(ring, dtype=np.float64)
+        if len(y) < 32:
+            return
+        if len(y) < nwin:  # right-align until the rolling window fills
+            y = np.concatenate([np.zeros(nwin - len(y)), y])
+        ln.set_data(np.arange(nwin), y[-nwin:])
+        ax1.set_ylim(min(-1.0, float(y.min())), max(1.0, float(y.max())))
+        seg = y[-fft:]
         spec = np.abs(np.fft.rfft(seg * np.hanning(len(seg))))
-        fl.set_data(np.arange(len(spec)) * (len(spec) / max(1, len(spec))), spec)
-        ax2.set_xlim(0, len(spec))
-        ax2.set_ylim(0, max(1.0, spec.max() * 1.1) if len(spec) else 1)
-        if seconds and time.time() - t0 > seconds:
-            stop.set()
-            plt.close(fig)
-        return ln, fl
+        fl.set_data(np.arange(len(spec)), spec)
+        ax2.set_ylim(0, max(1.0, float(spec.max()) * 1.1))
 
-    _ = anim.FuncAnimation(fig, upd, interval=1000 // fps, blit=False, cache_frame_data=False)
-    plt.tight_layout()
-    plt.show()
-    stop.set()
-    th.join(timeout=1)
+    try:
+        while True:
+            upd()
+            fig.canvas.draw_idle()
+            fig.canvas.flush_events()
+            plt.pause(1.0 / fps)
+            if seconds and time.time() - t0 > seconds:
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop.set()
+        th.join(timeout=1)
+        plt.close(fig)
 
 
 def main(argv=None):
