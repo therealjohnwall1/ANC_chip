@@ -135,9 +135,12 @@ windows over the existing USB JTAG cable (pyftdi) — no extra adapter and no PS
 
 ```sh
 fpga/host/.venv/bin/python fpga/host/jtag_live.py \
-    --url ftdi://ftdi:2232:8871482302DF/1 ramp --count 8
+    --url ftdi://ftdi:2232:8871422302DF/1 ramp --count 8
 fpga/host/.venv/bin/python fpga/host/jtag_live.py ... plot
 ```
+
+Or from the repo root, the wrapper handles venv + deps:
+`./livetest_c.sh [ramp|plot] ...`.
 
 The Zynq JTAG chain has two TAPs (TDI → ARM DAP ir=4 → PL ir=6 → TDO); the host
 sets PL=USER1 and ARM=BYPASS, then scans the DR repeatedly (length
