@@ -27,6 +27,12 @@ case "$TARGET" in
          sample_in.sv anti_noise.sv s_hat_fir.sv error_block.sv regfile.sv)
     TRACE=()
     ;;
+  loop)
+    TB="anc_loop_tb.sv"
+    SRC=(anc_loop.sv plant_fir.sv anchor_top.sv sample_in.sv anti_noise.sv
+         s_hat_fir.sv error_block.sv regfile.sv)
+    TRACE=()
+    ;;
   *)
     echo "usage: $0 [selftest|spi]" >&2
     exit 2
