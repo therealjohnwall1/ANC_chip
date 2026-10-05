@@ -78,7 +78,7 @@ module top
   logic       mm_adc_valid, mm_err_valid;
   logic [INPUT_WIDTH-1:0] mm_adc_data, mm_err_data;
   logic [$clog2(TAP_LEN)-1:0] mm_sh_wr_sel, mm_sh_rd_sel, mm_w_rd_sel;
-  sample_t    mm_sh_wr_data, mm_sh_rd_data, mm_w_rd_data;
+  sample_t    mm_sh_wr_data, mm_sh_rd_data;
   logic       mm_sh_wr_en;
 
   // ---- self_test outputs / status ----
@@ -139,7 +139,7 @@ module top
       .sh_rd_sel   (mm_sh_rd_sel),
       .sh_rd_data  (mm_sh_rd_data),
       .w_rd_sel    (mm_w_rd_sel),
-      .w_rd_data   (mm_w_rd_data),
+      .w_rd_data   (w_rd_data),
       .y_n         (y_n),
       .y_n_ready   (y_n_ready),
       .w_n_updated (w_n_updated),

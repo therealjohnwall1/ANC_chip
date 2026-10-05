@@ -21,7 +21,8 @@ fpga/
   design.mk       TOP / PART / FLASH_ARGS (also read by `psync ... flash`)
   constr/top.xdc  Blackboard pin constraints (clock, LEDs, PmodA SPI)
   scripts/gen_selftest_vectors.py   regenerate the on-chip test vectors
-  tb/             Verilator self-test testbench (tb/run.sh)
+  tb/             Verilator testbenches (tb/run.sh [selftest|spi])
+  host/anc_spi.py host driver for the PmodA SPI/MMIO interface (see host/README.md)
   src/
     top.sv        Blackboard wrapper (SPI/MMIO + self-test mux)
     self_test.sv  on-chip golden-vector self-test FSM
