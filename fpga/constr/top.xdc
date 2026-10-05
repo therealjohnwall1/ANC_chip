@@ -55,3 +55,7 @@ set_property -dict {PACKAGE_PIN F17 IOSTANDARD LVCMOS33} [get_ports pmod_cs_n] ;
 set_property -dict {PACKAGE_PIN G19 IOSTANDARD LVCMOS33} [get_ports pmod_sdi]  ;# JA2_P
 set_property -dict {PACKAGE_PIN G20 IOSTANDARD LVCMOS33} [get_ports pmod_sdo]  ;# JA2_N
 set_property -dict {PACKAGE_PIN E18 IOSTANDARD LVCMOS33} [get_ports pmod_irq]  ;# JA3_P
+
+## On-board MEMS PDM microphone (SPK0833LM4H, wired to the PL)
+set_property -dict {PACKAGE_PIN N15 IOSTANDARD LVCMOS33} [get_ports m_clk]  ;# M_CLK
+set_property -dict {PACKAGE_PIN L14 IOSTANDARD LVCMOS33} [get_ports m_data] ;# M_DATA

@@ -39,7 +39,11 @@ module top
     input  logic pmod_cs_n,
     input  logic pmod_sdi,
     output logic pmod_sdo,
-    output logic pmod_irq
+    output logic pmod_irq,
+
+    // on-board MEMS PDM microphone (M_CLK = N15, M_DATA = L14)
+    output logic m_clk,
+    input  logic m_data
 );
 
   localparam int HW = $clog2(HIST_DEPTH);
@@ -217,13 +221,49 @@ module top
 
   // ========================================================================
   // JTAG (BSCANE2 USER1) sample streamer -- option C live-test link
+  //
+  // On-board PDM mic -> PCM (16 kHz) -> rolling window (clk domain); the JTAG
+  // capture snaps {index, window} so the host can de-duplicate overlaps.
   // ========================================================================
+  localparam int NSAMP = 16;
+
+  logic signed [15:0] mic_pcm;
+  logic               mic_valid;
+  logic [31:0]        mic_idx;
+
+  pdm_mic u_mic (
+      .clk       (clk),
+      .rst_n     (rst_n),
+      .m_clk     (m_clk),
+      .m_data    (m_data),
+      .pcm       (mic_pcm),
+      .pcm_valid (mic_valid),
+      .sample_idx(mic_idx)
+  );
+
+  logic [15:0] win[0:NSAMP-1];  // win[NSAMP-1] = newest
+  logic [31:0] win_idx;
+
+  always_ff @(posedge clk) begin
+    if (mic_valid) begin
+      for (int k = 0; k < NSAMP - 1; k++) win[k] <= win[k+1];
+      win[NSAMP-1] <= mic_pcm;
+      win_idx      <= mic_idx;
+    end
+  end
+
+  logic [NSAMP*16-1:0] win_packed;
+  always_comb
+    for (int k = 0; k < NSAMP; k++) win_packed[k*16+:16] = win[k];
+
+  localparam int STREAM_W = NSAMP * 16 + 32;
+  logic [STREAM_W-1:0] stream_data;
+  assign stream_data = {win_idx, win_packed};
+
   jtag_stream #(
-      .NSAMP(16),
-      .SW   (16)
+      .WIDTH(STREAM_W)
   ) u_jtag_stream (
-      .clk  (clk_anc),
-      .rst_n(rst_n)
+      .data_in(stream_data)
   );
 
   // ========================================================================

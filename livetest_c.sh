@@ -4,9 +4,9 @@
 # Creates the host venv if needed, ensures pyftdi is installed, then runs the
 # JTAG stream reader (fpga/host/jtag_live.py). Extra args are passed through.
 #
-#   ./livetest_c.sh                      # default: read a few ramp windows
-#   ./livetest_c.sh ramp --count 8
-#   ./livetest_c.sh plot                 # live rolling plot
+#   ./livetest_c.sh                      # default: print a few windows
+#   ./livetest_c.sh raw --count 8
+#   ./livetest_c.sh plot                 # live rolling waveform + spectrum
 #   ./livetest_c.sh --url ftdi://ftdi:2232/1 plot
 #
 # Run from anywhere; paths are resolved relative to this script.
@@ -29,7 +29,7 @@ if ! "$PY" -c "import pyftdi" >/dev/null 2>&1; then
 fi
 
 if [ "$#" -eq 0 ]; then
-	set -- ramp --count 4
+	set -- raw --count 4
 fi
 
 exec "$PY" "$ROOT/fpga/host/jtag_live.py" "$@"

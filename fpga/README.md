@@ -129,24 +129,23 @@ on a 25 MHz divided clock). The register map is documented at the top of
 
 ## JTAG live link (option C)
 
-`src/jtag_stream.sv` exposes a window of 16×16-bit samples on the FPGA's JTAG
-**USER1** data register via a `BSCANE2` primitive. `host/jtag_live.py` pulls
-windows over the existing USB JTAG cable (pyftdi) — no extra adapter and no PS:
+`src/jtag_stream.sv` exposes a window of 16×16-bit samples **plus a 32-bit
+sample index** on the FPGA's JTAG **USER1** data register via a `BSCANE2`
+primitive. The stream currently carries the **on-board PDM microphone**
+(`src/pdm_mic.sv`): `M_CLK`=N15 @ 2 MHz, `M_DATA`=L14 decimated ×125 → 16 kHz
+PCM. The host de-duplicates overlapping windows with the index.
 
+From the repo root the wrapper handles venv + deps:
 ```sh
-fpga/host/.venv/bin/python fpga/host/jtag_live.py \
-    --url ftdi://ftdi:2232:8871422302DF/1 ramp --count 8
-fpga/host/.venv/bin/python fpga/host/jtag_live.py ... plot
+./livetest_c.sh                 # print a few windows (raw)
+./livetest_c.sh plot            # live rolling waveform + spectrum (16 kHz)
 ```
-
-Or from the repo root, the wrapper handles venv + deps:
-`./livetest_c.sh [ramp|plot] ...`.
+(or directly: `fpga/host/.venv/bin/python fpga/host/jtag_live.py <raw|plot>`.)
 
 The Zynq JTAG chain has two TAPs (TDI → ARM DAP ir=4 → PL ir=6 → TDO); the host
 sets PL=USER1 and ARM=BYPASS, then scans the DR repeatedly (length
-`16*16+1`). This build streams a self-contained ramp to validate the transport;
-the source is swapped for mic/ANC samples next. Verilator uses the passive
-`src/bscan_sim_stub.sv` model for `BSCANE2`.
+`16*16+32+1`). Verilator uses the passive `src/bscan_sim_stub.sv` model for
+`BSCANE2`.
 
 ## Bring-up status
 
