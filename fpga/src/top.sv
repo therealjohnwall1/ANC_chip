@@ -43,7 +43,10 @@ module top
 
     // on-board MEMS PDM microphone (M_CLK = N15, M_DATA = L14)
     output logic m_clk,
-    input  logic m_data
+    input  logic m_data,
+
+    // on-board PWM audio out -> headphone jack (AUDIO = G18)
+    output logic audio
 );
 
   localparam int HW = $clog2(HIST_DEPTH);
@@ -307,6 +310,20 @@ module top
   );
 
   // ========================================================================
+  // PWM audio out -> headphone jack. SW2=1 plays d (raw noise), 0 plays e
+  // (cancelled residual), so you can A/B the cancellation by ear.
+  // ========================================================================
+  logic signed [15:0] audio_src;
+  assign audio_src = sw[2] ? al_d : al_e;
+
+  pwm_audio u_audio (
+      .clk(clk_anc),
+      .rst_n(rst_n),
+      .sample(audio_src),
+      .pwm(audio)
+  );
+
+  // ========================================================================
   // Board I/O
   // ========================================================================
   assign pmod_sdo = sdo;
@@ -330,6 +347,6 @@ module top
   assign rgb_b = 3'b0;
 
   logic _unused;
-  assign _unused = ^{btn, sw[11:2], adc_rdy, err_rdy, x_n_new, x_n, x_tap_out, head_idx};
+  assign _unused = ^{btn, sw[11:3], adc_rdy, err_rdy, x_n_new, x_n, x_tap_out, head_idx};
 
 endmodule

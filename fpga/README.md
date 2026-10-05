@@ -24,8 +24,12 @@ fpga/
   tb/             Verilator testbenches (tb/run.sh [selftest|spi])
   host/anc_spi.py host driver for the PmodA SPI/MMIO interface (see host/README.md)
   src/
-    top.sv        Blackboard wrapper (SPI/MMIO + self-test mux)
+    top.sv        Blackboard wrapper (ANC loop / self-test / SPI mux)
     self_test.sv  on-chip golden-vector self-test FSM
+    pdm_mic.sv    on-board MEMS PDM mic capture -> 16 kHz PCM
+    anc_loop.sv   closed-loop FxLMS controller (simulated error mic)
+    plant_fir.sv  Q1.15 FIR for the simulated P(z)/S(z) paths
+    pwm_audio.sv  8-bit PWM audio out to the headphone jack
     pkg/globals.sv          fixed-point formats & parameters (read first)
     pkg/selftest_params.sv  generated: ANC_N, ANC_PRIME, X_LEN, Y_CHK
     mem/          generated ROMs: x.mem, e.mem, w.mem, shat.mem
@@ -34,16 +38,22 @@ fpga/
   build/          Vivado output (gitignored)
 ```
 
-SW0 selects what drives the single `anchor_top` instance:
+Switches select what drives the single `anchor_top` instance and the audio out:
 
-| SW0 | mode                                                     |
-|-----|----------------------------------------------------------|
-| 0   | **on-chip self-test** (default) — pass/fail on LEDs      |
-| 1   | **PmodA SPI/MMIO** host interface                        |
+| switch            | effect                                                         |
+|-------------------|----------------------------------------------------------------|
+| SW1 = 0 (default) | **mic-driven ANC loop** (`anc_loop`) → `x/d/y/e` JTAG stream    |
+| SW1 = 1, SW0 = 0  | on-chip self-test — pass/fail on LEDs                           |
+| SW1 = 1, SW0 = 1  | PmodA SPI/MMIO host interface                                   |
+| SW2               | audio out: 1 = `d` (raw noise), 0 = `e` (cancelled residual)    |
 
-LEDs: `led[0]=pass`, `led[1]=done`, `led[2]=busy`, `led[3]=fail`,
-`led[4]=SW0/mode`, `led[5]=heartbeat`; RGB LED: green=pass, red=fail,
-blue=running.
+The **PWM audio out** (`pwm_audio.sv`, pin `G18` → headphone jack) plays the
+selected signal as 8-bit PWM at `clk/256` = 97.7 kHz. Plug in headphones and
+toggle SW2 to A/B the cancellation by ear.
+
+LEDs: `led[0]=anc sample`, `led[1]=self-test done`, `led[2]=busy`,
+`led[3]=self-test fail`, `led[4]=ANC mode`, `led[5]=heartbeat`; RGB LED:
+blue=ANC mode, green=self-test pass, red=fail.
 
 ## On-chip self-test
 

@@ -59,3 +59,6 @@ set_property -dict {PACKAGE_PIN E18 IOSTANDARD LVCMOS33} [get_ports pmod_irq]  ;
 ## On-board MEMS PDM microphone (SPK0833LM4H, wired to the PL)
 set_property -dict {PACKAGE_PIN N15 IOSTANDARD LVCMOS33} [get_ports m_clk]  ;# M_CLK
 set_property -dict {PACKAGE_PIN L14 IOSTANDARD LVCMOS33} [get_ports m_data] ;# M_DATA
+
+## PWM audio output to the headphone jack (left channel)
+set_property -dict {PACKAGE_PIN G18 IOSTANDARD LVCMOS33} [get_ports audio]  ;# AUDIO / HPH_L
