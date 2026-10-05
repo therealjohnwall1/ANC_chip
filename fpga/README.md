@@ -133,3 +133,4 @@ on a 25 MHz divided clock). The register map is documented at the top of
 |------------|---------------------------------------------------------------------|
 | 2026-10-04 | Vivado 2026.1 (piserver), `make` OK, **WNS +7.97 ns** @ 25 MHz, 1805 LUTs (12.5%), 1.5 BRAM, 8 DSPs, 23 IOB |
 | 2026-10-04 | flashed via `openFPGALoader`; self-test matches the Verilator run (SW0=0 → RGB green, `led[0]`=pass, `led[1]`=done) |
+| 2026-10-04 | rebuilt + reflashed after the SPI W-readback fix (WNS +7.67 ns); `fpga/tb/run.sh spi` PASS |
