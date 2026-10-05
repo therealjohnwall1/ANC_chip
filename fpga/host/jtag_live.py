@@ -111,6 +111,68 @@ def _drain(js, rings, stop, lock):
                 last = si
 
 
+def cmd_plot_mic(js, seconds, fs=16000, fps=30, nwin=2000, fft=1024):
+    """Just the reference mic: rolling waveform + spectrum.
+
+    Works for either format -- the mic is the first channel ('x' in q4, the
+    only channel in 'mic')."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    ch = "x" if "x" in js.chans else js.chans[0]
+    ring = deque(maxlen=nwin)
+    stop = threading.Event()
+    lock = threading.Lock()
+    th = threading.Thread(target=_drain, args=(js, [ring], stop, lock), daemon=True)
+    th.start()
+
+    plt.ion()
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 6))
+    fig.suptitle(f"anchor FPGA on-board mic ('{ch}') -- rolling window")
+    (ln,) = ax1.plot([], [], lw=1, color="tab:blue")
+    ax1.set_xlim(0, nwin)
+    ax1.set_xlabel("samples (most recent at right)")
+    ax1.set_ylabel("PCM")
+    (fl,) = ax2.plot([], [], lw=1, color="tab:orange")
+    ax2.set_xlim(0, fs / 2)
+    ax2.set_xlabel("Hz")
+    ax2.set_ylabel("|FFT|")
+    fig.tight_layout()
+
+    freqs = np.fft.rfftfreq(fft, d=1.0 / fs)
+    t0 = time.time()
+
+    def snap():
+        with lock:
+            return np.fromiter(ring, dtype=np.float64)
+
+    try:
+        while True:
+            y = snap()
+            if len(y) >= 32:
+                if len(y) < nwin:
+                    y = np.concatenate([np.zeros(nwin - len(y)), y])
+                ln.set_data(np.arange(nwin), y[-nwin:])
+                ax1.set_ylim(min(-100.0, float(y.min())), max(100.0, float(y.max())))
+                seg = y[-fft:]
+                if len(seg) < fft:
+                    seg = np.concatenate([np.zeros(fft - len(seg)), seg])
+                sp = np.abs(np.fft.rfft(seg * np.hanning(len(seg))))
+                fl.set_data(freqs, sp)
+                ax2.set_ylim(0, max(1.0, float(sp.max()) * 1.1))
+            fig.canvas.draw_idle()
+            fig.canvas.flush_events()
+            plt.pause(1.0 / fps)
+            if seconds and time.time() - t0 > seconds:
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop.set()
+        th.join(timeout=1)
+        plt.close(fig)
+
+
 def cmd_plot(js, seconds, fs=16000, fps=30, nwin=2000, fft=1024):
     import numpy as np
     import matplotlib.pyplot as plt
@@ -196,6 +258,8 @@ def main(argv=None):
     q = sub.add_parser("plot")
     q.add_argument("--seconds", type=float, default=0)
     q.add_argument("--fs", type=float, default=16000)
+    q.add_argument("--view", choices=["anc", "mic"], default="anc",
+                   help="anc: d vs e; mic: just the reference mic waveform+FFT")
     args = p.parse_args(argv)
 
     js = JtagStream(args.url, args.fmt, args.freq)
@@ -203,7 +267,10 @@ def main(argv=None):
         if args.cmd == "raw":
             cmd_raw(js, args.count)
         elif args.cmd == "plot":
-            cmd_plot(js, args.seconds, fs=args.fs)
+            if args.view == "mic":
+                cmd_plot_mic(js, args.seconds, fs=args.fs)
+            else:
+                cmd_plot(js, args.seconds, fs=args.fs)
     finally:
         js.close()
     return 0

@@ -28,6 +28,12 @@ if ! "$PY" -c "import pyftdi" >/dev/null 2>&1; then
 	"$VENV/bin/pip" install --quiet pyftdi
 fi
 
+# `./livetest_c.sh mic ...` is shorthand for `plot --view mic`
+if [ "${1:-}" = "mic" ]; then
+	shift
+	set -- plot --view mic "$@"
+fi
+
 if [ "$#" -eq 0 ]; then
 	set -- raw --count 4
 fi
