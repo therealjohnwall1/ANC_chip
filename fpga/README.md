@@ -108,8 +108,9 @@ This loads the bitstream into PL SRAM (volatile — lost on power cycle). Use
 | JA3_P     | E18      | `pmod_irq`  | out  |
 
 SPI mode 0, MSB-first, 24-bit frames: `rw | addr[6:0] | data[15:0]`. Keep
-`sclk ≤ 25 MHz` (`serial_bridge` requires `sclk ≤ clk/4`). The register map is
-documented at the top of `src/mmio_regs.sv`.
+`sclk ≤ 6.25 MHz` (`serial_bridge` requires `sclk ≤ clk/4`; the datapath runs
+on a 25 MHz divided clock). The register map is documented at the top of
+`src/mmio_regs.sv`.
 
 ## Notes
 
@@ -117,7 +118,10 @@ documented at the top of `src/mmio_regs.sv`.
   their port lists); `build.tcl` reads `src/pkg/*.sv` first for this reason.
 - `build.tcl` copies `src/mem/*.mem` into the run dir so the self-test ROMs'
   relative `$readmemh` paths resolve.
-- No PLL: the 100 MHz board clock runs the design directly.
+- Clock: the 100 MHz board clock is divided by 4 to 25 MHz (`clk_anc`) for the
+  whole design — `error_block`'s NLMS update has a ~21 ns critical path, so
+  100 MHz does not close timing. The divider output is a BUFG with a
+  `create_generated_clock` constraint (see `constr/top.xdc`).
 - One `anchor_top` instance is shared between the self-test and the PmodA SPI
   path, selected by SW0. `chip/rtl/tt_um_anchor.sv` is kept untouched for the
   TinyTapeout flow; `top.sv` repeats its SPI/MMIO wiring plus the mux.

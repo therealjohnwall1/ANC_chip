@@ -11,8 +11,9 @@
 // The SPI/MMIO wiring matches chip/rtl/tt_um_anchor.sv; that wrapper is left
 // untouched for the TinyTapeout flow.
 //
-// Clocking: the 100 MHz board clock drives the design directly (handshake
-// paced, no PLL). serial_bridge requires sclk <= clk/4, so keep host SPI < 25 MHz.
+// Clocking: error_block's NLMS update has a ~21 ns critical path, so the
+// 100 MHz board clock is divided by 4 to 25 MHz (40 ns) for the whole design.
+// serial_bridge requires sclk <= clk/4, i.e. keep host SPI below 6.25 MHz.
 //
 // PmodA pinout (constr/top.xdc):
 //   JA1_P F16 pmod_sclk, JA1_N F17 pmod_cs_n, JA2_P G19 pmod_sdi,
@@ -43,9 +44,22 @@ module top
 
   localparam int HW = $clog2(HIST_DEPTH);
 
-  // ---- reset ----
+  // ---- clock: 100 MHz / 4 = 25 MHz for the ANC datapath ----
+  logic [1:0] clk_div = 2'b0;
+  always_ff @(posedge clk) clk_div <= clk_div + 1'b1;
+  logic clk_anc;
+`ifdef VERILATOR
+  assign clk_anc = clk_div[1];
+`else
+  BUFG u_bufg_anc (
+      .I(clk_div[1]),
+      .O(clk_anc)
+  );
+`endif
+
+  // ---- reset (in the clk_anc domain) ----
   logic [7:0] por = '0;
-  always_ff @(posedge clk)
+  always_ff @(posedge clk_anc)
     if (por != 8'hFF) por <= por + 1'b1;
   logic rst_n;
   assign rst_n = (por == 8'hFF);
@@ -94,7 +108,7 @@ module top
   // SPI slave -> MMIO transaction interface
   // ========================================================================
   serial_bridge u_bridge (
-      .clk  (clk),
+      .clk  (clk_anc),
       .rst_n(rst_n),
       .sclk (pmod_sclk),
       .cs_n (pmod_cs_n),
@@ -108,7 +122,7 @@ module top
   );
 
   mmio_regs u_mmio (
-      .clk         (clk),
+      .clk         (clk_anc),
       .rst_n       (rst_n),
       .wr          (wr),
       .rd          (rd),
@@ -139,7 +153,7 @@ module top
   // On-chip self-test (built-in vectors)
   // ========================================================================
   self_test u_self_test (
-      .clk         (clk),
+      .clk         (clk_anc),
       .rst_n       (rst_n),
       .run         (test_mode),
       .adc_valid   (st_adc_valid),
@@ -174,7 +188,7 @@ module top
   assign w_rd_sel   = test_mode ? st_w_rd_sel   : mm_w_rd_sel;
 
   anchor_top u_anchor (
-      .clk         (clk),
+      .clk         (clk_anc),
       .rst_n       (rst_n),
       .adc_valid   (adc_valid),
       .adc_data    (adc_data),
@@ -208,7 +222,7 @@ module top
   assign pmod_irq = irq;
 
   logic [24:0] hb = '0;
-  always_ff @(posedge clk) hb <= hb + 1'b1;
+  always_ff @(posedge clk_anc) hb <= hb + 1'b1;
 
   assign led[0]   = st_pass;
   assign led[1]   = st_done;

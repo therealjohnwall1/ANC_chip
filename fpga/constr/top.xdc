@@ -5,6 +5,10 @@
 set_property -dict {PACKAGE_PIN H16 IOSTANDARD LVCMOS33} [get_ports clk]
 create_clock -period 10.000 -name sys_clk [get_ports clk]
 
+## Datapath clock: clk / 4 = 25 MHz (BUFG output in top.sv)
+create_generated_clock -name clk_anc -source [get_ports clk] -divide_by 4 \
+    [get_pins u_bufg_anc/O]
+
 ## LEDs
 set_property -dict {PACKAGE_PIN N20 IOSTANDARD LVCMOS33} [get_ports {led[0]}]
 set_property -dict {PACKAGE_PIN P20 IOSTANDARD LVCMOS33} [get_ports {led[1]}]
